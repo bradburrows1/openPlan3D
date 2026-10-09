@@ -5,7 +5,8 @@ for (const width of [1440, 390]) {
   test(`fit includes automatic dimension ink at ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
     await page.addInitScript(() => {
-      localStorage.setItem('o3d_settings', JSON.stringify({ showInternalDimensions: true, showExternalDimensions: true, dimensionLineColor: '#123abc' }));
+      // Internal room dimensions are recognised by the decorative style's caption colour below.
+      localStorage.setItem('o3d_settings', JSON.stringify({ showInternalDimensions: true, showExternalDimensions: true, dimensionLineColor: '#123abc', planStyle: 'decorative' }));
       const clear = CanvasRenderingContext2D.prototype.clearRect;
       CanvasRenderingContext2D.prototype.clearRect = function(x, y, w, h) {
         if (this.canvas.getAttribute('aria-label') === 'Floor plan editor canvas') (window as any).__captionInk = {};

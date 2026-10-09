@@ -19,6 +19,7 @@
   import { floorMaterials, wallColors } from '$lib/utils/materials';
   import { getCatalogItem } from '$lib/utils/furnitureCatalog';
   import { projectSettings, formatLength, formatArea, parseLengthInput } from '$lib/stores/settings';
+  import { isTechnicalStyle } from '$lib/utils/planStyle';
     import type { Floor, Wall, Door, Window as Win, Room, FurnitureItem, Stair, Column, RoomCategory, TextAnnotation } from '$lib/models/types';
   import { getWallStartHeight, getWallEndHeight } from '$lib/models/types';
 
@@ -808,6 +809,8 @@
         {$t('roomProperties.opening')}
       </label>
       <p class="text-xs text-gray-500">{$t('roomProperties.openingHelp')}</p>
+      <!-- Northway: room colours and floor materials only show in the decorative plan style -->
+      {#if !isTechnicalStyle(settings)}
       <div>
         <span class="text-xs text-gray-500 mb-1.5 block">{$t('roomProperties.color')}{selectedRoom.floorTexture === 'none' ? $t('roomProperties.floorColor') : ''}</span>
         <div class="grid grid-cols-5 gap-1.5 mb-2">
@@ -861,6 +864,7 @@
           {/each}
         </div>
       </div>
+      {/if}
     </div>
 
   {:else if selectedEntourage}

@@ -1,6 +1,8 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
   import { onMount } from 'svelte';
+  import { projectSettings } from '$lib/stores/settings';
+  import { isTechnicalStyle } from '$lib/utils/planStyle';
   import type { Wall, Door, Window as Win, FurnitureItem, Room } from '$lib/models/types';
 
   interface Props {
@@ -161,9 +163,11 @@
       <button class="ctx-item" role="menuitem" onclick={() => clickItem('rename-room')}>
         <span class="ctx-icon">✏️</span> {$t('contextMenu.renameRoom')}
       </button>
+      {#if !isTechnicalStyle($projectSettings)}
       <button class="ctx-item" role="menuitem" onclick={() => clickItem('change-floor-texture')}>
         <span class="ctx-icon">🎨</span> {$t('contextMenu.changeFloorTexture')}
       </button>
+      {/if}
       <div class="ctx-sep"></div>
       <button class="ctx-item ctx-danger" role="menuitem" onclick={() => clickItem('delete-room')}>
         <span class="ctx-icon">🗑️</span> {$t('contextMenu.deleteRoom')}

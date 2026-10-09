@@ -46,6 +46,8 @@ export const pt = {
   "settings.howToGetOpenaiKey": "Como obter uma chave OpenAI",
   "settings.goToOpenaiPlatform": "OpenAI Platform",
   "settings.createSecretKeyStep": "Clique em \"Create new secret key\"",
+  "settings.decorativeFloors": "Acabamentos decorativos do piso",
+  "settings.decorativeFloorsHelp": "Mostrar cores dos cômodos e texturas de material do piso (madeira, cerâmica, pedra) na planta e nas exportações. Desligado gera uma planta técnica simples.",
   "settings.wallSnap": "Ajuste às paredes",
   "settings.wallSnapHelp": "Os móveis alinham automaticamente a parte traseira com as paredes próximas",
   "floors.title": "Elevações dos pisos",

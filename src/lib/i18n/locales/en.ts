@@ -46,6 +46,8 @@ export const en = {
   "settings.howToGetOpenaiKey": "How to get an OpenAI key",
   "settings.goToOpenaiPlatform": "OpenAI Platform",
   "settings.createSecretKeyStep": "Click \"Create new secret key\"",
+  "settings.decorativeFloors": "Decorative floor finishes",
+  "settings.decorativeFloorsHelp": "Show room colours and floor material textures (wood, tile, stone) on the plan and in exports. Off gives a plain technical survey plan.",
   "settings.wallSnap": "Wall snapping",
   "settings.wallSnapHelp": "Furniture automatically aligns its back edge with nearby walls",
   "floors.title": "Floor elevations",

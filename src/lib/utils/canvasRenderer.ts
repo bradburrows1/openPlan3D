@@ -17,6 +17,7 @@ import { drawFurnitureIcon } from '$lib/utils/furnitureIcons';
 import { getRoomPolygon, roomCentroid, roomLabelPosition } from '$lib/utils/roomDetection';
 import { getWallTextureCanvas, getFloorTextureCanvas } from '$lib/utils/textureGenerator';
 import { getEntourageDef } from '$lib/utils/entourageCatalog';
+import { isTechnicalStyle, TECHNICAL } from '$lib/utils/planStyle';
 import type { EntourageItem, CustomEntourageDef } from '$lib/models/types';
 
 // ── Wall geometry helpers ────────────────────────────────────────────
@@ -1387,7 +1388,9 @@ const ROOM_FILLS_DEFAULT = [
   'rgba(45, 212, 191, 0.07)', 'rgba(251, 146, 60, 0.07)',
 ];
 
-export function getRoomFill(room: Room, index: number): string {
+export function getRoomFill(room: Room, index: number, technical = false): string {
+  // Technical style: one neutral fill for every room, whatever its colour.
+  if (technical) return TECHNICAL.roomFill;
   // Solid-color floors (floorTexture 'none') show the room color much more
   // strongly since there is no texture painted on top.
   const solid = room.floorTexture === 'none';
@@ -1408,8 +1411,11 @@ const ROOM_FLOOR_PATTERN: Record<string, FloorPatternType> = {
   'Garage': 'stone', 'Closet': 'none',
 };
 
-export function drawRoomFloorPattern(cs: CanvasState, room: Room, screenPoly: Point[], holes: Point[][] = []): void {
+export function drawRoomFloorPattern(cs: CanvasState, room: Room, screenPoly: Point[], holes: Point[][] = [], technical = false): void {
   const { ctx, zoom } = cs;
+  // Technical style: no floor textures and no wood/tile/stone fallback lines.
+  // floorTexture stays on the room so the decorative style can restore it.
+  if (technical) return;
   // Solid-color floor: no texture, no fallback pattern — the fill from
   // getRoomFill is the floor.
   if (room.floorTexture === 'none') return;
@@ -1488,6 +1494,7 @@ export function drawRooms(
   polygons?: ReadonlyMap<string, Point[]>,
 ): void {
   const { ctx, zoom } = cs;
+  const technical = isTechnicalStyle(dimSettings);
   const roomPolygons = detectedRooms.map(room => polygons?.get(room.id) ?? getRoomPolygon(room, floor.walls));
   const holes = roomHoles(roomPolygons);
   for (let ri = 0; ri < detectedRooms.length; ri++) {
@@ -1496,12 +1503,12 @@ export function drawRooms(
     if (poly.length < 3) continue;
     const screenPoly = poly.map(p => wts(cs, p.x, p.y));
     const screenHoles = holes[ri].map(ring => ring.map(p => wts(cs, p.x, p.y)));
-    ctx.fillStyle = getRoomFill(room, ri);
+    ctx.fillStyle = getRoomFill(room, ri, technical);
     traceRoomRings(ctx, screenPoly, screenHoles);
     if (!room.floorOpening) ctx.fill('evenodd');
     else { ctx.strokeStyle='#64748b'; ctx.lineWidth=1; ctx.setLineDash([4,4]); ctx.stroke(); ctx.setLineDash([]); }
 
-    if (!room.floorOpening) drawRoomFloorPattern(cs, room, screenPoly, screenHoles);
+    if (!room.floorOpening) drawRoomFloorPattern(cs, room, screenPoly, screenHoles, technical);
 
     const isSelected = currentSelectedRoomId === room.id;
     if (isSelected) {
@@ -1513,7 +1520,7 @@ export function drawRooms(
     const sc = wts(cs, centroid.x, centroid.y);
     const fontSize = Math.max(11, 13 * zoom);
     if (showRoomLabels) {
-      ctx.fillStyle = '#9ca3af';
+      ctx.fillStyle = technical ? TECHNICAL.roomLabel : '#9ca3af';
       ctx.font = `${fontSize}px sans-serif`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       const anchor = roomLabelPosition(room, poly, holes[ri]);
@@ -1528,7 +1535,7 @@ export function drawRooms(
       const roomD = (maxY - minY) / 100;
       if (roomW > 0.1 && roomD > 0.1) {
         const dimFontSize = Math.max(9, 10 * zoom);
-        ctx.fillStyle = '#b0b8c4'; ctx.font = `${dimFontSize}px sans-serif`;
+        ctx.fillStyle = technical ? TECHNICAL.roomSubLabel : '#b0b8c4'; ctx.font = `${dimFontSize}px sans-serif`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(`${formatLength(roomW * 100, dimSettings.units)} × ${formatLength(roomD * 100, dimSettings.units)}`, sc.x, sc.y + fontSize + 2);
       }

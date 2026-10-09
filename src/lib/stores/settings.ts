@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import type { PlanStyle } from '$lib/utils/planStyle';
 
 export interface ProjectSettings {
   units: 'metric' | 'imperial';         // m,cm vs ft,inch
@@ -12,6 +13,7 @@ export interface ProjectSettings {
   snapToGrid: boolean;                   // snap elements to grid when dragging
   snapToWalls: boolean;                  // snap furniture to nearby walls when dragging
   gridSize: number;                      // grid snap size in cm (default 25)
+  planStyle?: PlanStyle;                 // 2D appearance; missing means 'technical'
 }
 
 const defaultSettings: ProjectSettings = {
@@ -26,6 +28,7 @@ const defaultSettings: ProjectSettings = {
   snapToGrid: true,
   snapToWalls: true,
   gridSize: 25,
+  planStyle: 'technical',
 };
 
 // Load from localStorage if available

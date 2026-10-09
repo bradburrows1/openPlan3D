@@ -23,6 +23,7 @@ import type { CanvasState } from '$lib/utils/canvasInteraction';
 import { projectSettings, formatArea, formatLength } from '$lib/stores/settings';
 import { get } from 'svelte/store';
 import jsPDF from 'jspdf';
+import { exportRoomFill, isTechnicalStyle, TECHNICAL } from './planStyle';
 
 /** Escape text for safe SVG embedding */
 function escapeXml(s: string): string {
@@ -229,7 +230,7 @@ export async function exportAsPNG(canvas: HTMLCanvasElement | null, project?: Pr
       ctx.fillRect(0, 0, w, h);
 
       // Draw room fills
-      const ROOM_COLORS = ['#bfdbfe', '#fde68a', '#bbf7d0', '#fecaca', '#ddd6fe', '#a5f3fc', '#fed7aa'];
+      const technical = isTechnicalStyle(get(projectSettings));
       const rooms = resolveRooms(floor);
       const polygons = rooms.map(room => getRoomPolygon(room, floor.walls));
       const holes = roomHoles(polygons);
@@ -237,18 +238,19 @@ export async function exportAsPNG(canvas: HTMLCanvasElement | null, project?: Pr
         const room = rooms[ri];
         const poly = polygons[ri];
         if (poly.length < 3) continue;
-        ctx.fillStyle = ROOM_COLORS[ri % ROOM_COLORS.length];
-        ctx.globalAlpha = 0.4;
+        const fill = exportRoomFill(ri, technical);
+        ctx.fillStyle = fill.color;
+        ctx.globalAlpha = fill.opacity;
         traceRoomRings(ctx, poly, holes[ri], p => ({x:p.x-minX+pad,y:p.y-minY+pad}));
         if (!room.floorOpening) ctx.fill('evenodd');
         ctx.globalAlpha = 1;
         // Room label
         const c = roomLabelPosition(room, poly, holes[ri]);
-        ctx.fillStyle = '#444';
+        ctx.fillStyle = technical ? TECHNICAL.roomLabel : '#444';
         ctx.font = 'bold 12px sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(room.name, c.x - minX + pad, c.y - minY + pad);
-        ctx.fillStyle = '#888';
+        ctx.fillStyle = technical ? TECHNICAL.roomSubLabel : '#888';
         ctx.font = '10px sans-serif';
         ctx.fillText(formatArea(room.area, get(projectSettings).units), c.x - minX + pad, c.y - minY + pad + 14);
       }
@@ -355,7 +357,7 @@ export function exportAsSVG(project: Project, language: Locale = 'en') {
   let paths = '';
 
   // Room fills
-  const ROOM_COLORS_SVG = ['#bfdbfe', '#fde68a', '#bbf7d0', '#fecaca', '#ddd6fe', '#a5f3fc', '#fed7aa'];
+  const technical = isTechnicalStyle(get(projectSettings));
   const rooms = resolveRooms(floor);
   const polygons = rooms.map(room => getRoomPolygon(room, floor.walls));
   const holes = roomHoles(polygons);
@@ -364,16 +366,17 @@ export function exportAsSVG(project: Project, language: Locale = 'en') {
     const poly = polygons[ri];
     if (poly.length < 3) continue;
     const pts = poly.map(p => `${p.x - minX + pad},${p.y - minY + pad}`).join(' ');
-    const color = room.floorOpening ? 'none' : ROOM_COLORS_SVG[ri % ROOM_COLORS_SVG.length];
+    const fill = exportRoomFill(ri, technical);
+    const color = room.floorOpening ? 'none' : fill.color;
     if (holes[ri].length) {
       const d = [poly,...holes[ri]].map(ring => `M ${ring.map(p=>`${p.x-minX+pad},${p.y-minY+pad}`).join(' L ')} Z`).join(' ');
-      paths += `  <path d="${d}" fill="${color}" fill-rule="evenodd" fill-opacity="0.4" stroke="none"/>\n`;
-    } else paths += `  <polygon points="${pts}" fill="${color}" fill-opacity="0.4" stroke="none"/>\n`;
+      paths += `  <path d="${d}" fill="${color}" fill-rule="evenodd" fill-opacity="${fill.opacity}" stroke="none"/>\n`;
+    } else paths += `  <polygon points="${pts}" fill="${color}" fill-opacity="${fill.opacity}" stroke="none"/>\n`;
     const c = roomLabelPosition(room, poly, holes[ri]);
     const cx = c.x - minX + pad;
     const cy = c.y - minY + pad;
-    paths += `  <text x="${cx}" y="${cy}" text-anchor="middle" font-size="12" fill="#444" font-family="sans-serif" font-weight="bold">${escapeXml(room.name)}</text>\n`;
-    paths += `  <text x="${cx}" y="${cy + 14}" text-anchor="middle" font-size="10" fill="#888" font-family="sans-serif">${formatArea(room.area, get(projectSettings).units)}</text>\n`;
+    paths += `  <text x="${cx}" y="${cy}" text-anchor="middle" font-size="12" fill="${technical ? TECHNICAL.roomLabel : '#444'}" font-family="sans-serif" font-weight="bold">${escapeXml(room.name)}</text>\n`;
+    paths += `  <text x="${cx}" y="${cy + 14}" text-anchor="middle" font-size="10" fill="${technical ? TECHNICAL.roomSubLabel : '#888'}" font-family="sans-serif">${formatArea(room.area, get(projectSettings).units)}</text>\n`;
   }
 
   for (const w of floor.walls) {
@@ -773,7 +776,7 @@ function renderPDF(project: Project, preparedImages: ReadonlyMap<string,HTMLImag
   ctx.fillRect(0, 0, planW, planH);
 
   // Room fills
-  const ROOM_COLORS = ['#bfdbfe', '#fde68a', '#bbf7d0', '#fecaca', '#ddd6fe', '#a5f3fc', '#fed7aa'];
+  const technical = isTechnicalStyle(settings);
   const rooms = resolveRooms(floor);
   const polygons = rooms.map(room => getRoomPolygon(room, floor.walls));
   const holes = roomHoles(polygons);
@@ -781,17 +784,18 @@ function renderPDF(project: Project, preparedImages: ReadonlyMap<string,HTMLImag
     const room = rooms[ri];
     const poly = polygons[ri];
     if (poly.length < 3) continue;
-    ctx.fillStyle = ROOM_COLORS[ri % ROOM_COLORS.length];
-    ctx.globalAlpha = 0.4;
+    const fill = exportRoomFill(ri, technical);
+    ctx.fillStyle = fill.color;
+    ctx.globalAlpha = fill.opacity;
     traceRoomRings(ctx, poly, holes[ri], p => ({x:p.x-minX+pad,y:p.y-minY+pad}));
     if (!room.floorOpening) ctx.fill('evenodd');
     ctx.globalAlpha = 1;
     const c = roomLabelPosition(room, poly, holes[ri]);
-    ctx.fillStyle = '#444';
+    ctx.fillStyle = technical ? TECHNICAL.roomLabel : '#444';
     ctx.font = 'bold 13px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(room.name, c.x - minX + pad, c.y - minY + pad);
-    ctx.fillStyle = '#888';
+    ctx.fillStyle = technical ? TECHNICAL.roomSubLabel : '#888';
     ctx.font = '11px sans-serif';
     ctx.fillText(formatArea(room.area, settings.units), c.x - minX + pad, c.y - minY + pad + 15);
   }
