@@ -227,6 +227,13 @@ Stage 3 added private staff sign-in and the Supabase-backed plan library, with s
 [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md) and "Stage 3: what was built" in
 [`NORTHWAY_CUSTOMISATION_PLAN.md`](NORTHWAY_CUSTOMISATION_PLAN.md).
 
+### Stage 4 additions
+
+Stage 4 added the Recommended Works overlay layer and custom findings and recommendations. Presets,
+the colour palette and layer styles are configured in `src/lib/northway/zonePresets.ts`. Both
+layers share `overlayStore.ts`, `overlayRenderer.ts` and `overlaySvg.ts`. See "Stage 4: what was
+built" in [`NORTHWAY_CUSTOMISATION_PLAN.md`](NORTHWAY_CUSTOMISATION_PLAN.md).
+
 ### Stage 2 additions
 
 Stage 2 added the survey object library (fixed fixtures only by default) and the Survey Findings

@@ -1,7 +1,8 @@
 # Northway customisation plan: survey overlays and branded exports
 
-Status: **Stage 2 implemented the Survey Findings layer** (see "Stage 2: what was built" at the end).
-Recommended Works, legends and branded exports are still plans. This note builds on the code map in
+Status: **Stage 2 implemented the Survey Findings layer and Stage 4 the Recommended Works layer**
+(see "Stage 2: what was built" and "Stage 4: what was built" at the end). Legends and branded exports
+are still plans (Stage 5). This note builds on the code map in
 [`NORTHWAY_ARCHITECTURE.md`](NORTHWAY_ARCHITECTURE.md).
 
 Goal for later stages:
@@ -215,3 +216,74 @@ Not done in Stage 2, and next in line:
   the Northway UI, and the upstream browser suite keeps running against it.
 * **Testing.** `tooling/northway-supabase/` runs a real Supabase Auth + PostgREST + PostgreSQL stack
   locally for the RLS integration tests and the browser suite.
+
+## Stage 4: what was built
+
+Recommended Works is a second overlay layer, separate from Survey Findings. Both layers share one
+model, store, renderer and exporters, and each can be edited, shown and hidden on its own.
+
+* **Model** (`src/lib/models/types.ts`):
+  * `Floor.recommendedWorks?: RecommendedWorkZone[]` alongside `Floor.surveyFindings?: SurveyFindingZone[]`.
+  * Both extend `OverlayZoneBase`: `{ id, layer, code, name?, color?, preset?, shape: 'rect', x, y,
+    width, height, note? }`. `layer` is `'survey-findings'` or `'recommended-works'`.
+  * `preset` is the preset code a zone started from, or `null` for a custom zone.
+  * New zones copy the preset's code, name and colour, so later edits to one zone, or to the preset
+    list, never change other zones.
+  * Rotation is not supported (rectangles are axis-aligned).
+* **Configuration** (`src/lib/northway/zonePresets.ts`). The only place presets, colours and layer
+  styles are defined:
+  * `ZONE_PALETTE`: 10 muted colours (blue, navy, indigo, teal, sage green, amber, orange, muted red,
+    mauve, grey).
+  * `SURVEY_FINDING_PRESETS`: HM, WM, DR, WR, MG, CD, PD, RD, TD and SV.
+  * `RECOMMENDED_WORK_PRESETS`: WT, DPT, TR, DRT, WRT, MR, VI, PR, MT and FI.
+  * Each preset is `{ layer, code, name, color, disabled? }`. An admin screen could later load the
+    same shape from the database: `disabled` hides a preset from pickers while saved plans still
+    recognise it.
+  * `LAYER_STYLES`:
+    * findings: 25% fill, solid 1.75 px border, code top-left;
+    * recommendations: 7% fill, diagonal hatch, dashed 2 px border, code on a white tag top-right.
+  * Helpers: `zoneAppearance()` resolves a zone's code, name and colour. `suggestCode()` and
+    `cleanCode()` handle short codes (uppercase letters and digits, at most 4 in the editor, up to 8
+    accepted in files).
+  * `overlayTypesInUse()` lists the distinct types used on the given floors, per layer, as
+    `{ code, name, color, custom }`. It is ready for the Stage 5 legend.
+* **Store** (`overlayStore.ts`):
+  * `placingZone` holds the armed template (preset or custom).
+  * Operations: `addZone`, `updateZone` (coalesced undo), `applyZonePreset`, `setZoneRect` (drag),
+    `duplicateZone`, `removeZone`, `floorZones()`.
+  * `surveyStore.ts`, `surveyPresets.ts` and `surveyRenderer.ts` remain as thin Stage 2 wrappers.
+* **Rendering**:
+  * `overlayRenderer.ts` is shared by the canvas, the PNG and PDF exports, and scaled print.
+    `overlaySvg.ts` emits the SVG equivalent, with one hatch pattern per colour.
+  * Drawing order: room fills, findings, recommendations, walls and openings, codes, then selection
+    and handles.
+* **Overlaps**:
+  * A click picks the smallest zone under the pointer. For equal areas, the recommendation (drawn on
+    top) wins.
+  * Pressing the zone that is already selected keeps it, so it can be dragged. A click without
+    dragging moves the selection to the next zone under the pointer.
+  * Hiding a layer also makes the other layer easier to reach.
+* **UI**:
+  * Build tab: Survey Findings (Add Issue Area, presets, **+ Custom Finding**, Show/Hide) and
+    Recommended Works (Add Recommended Area, presets, **+ Custom Recommendation**, Show/Hide).
+  * The custom dialog (`components/ZoneTemplateDialog.svelte`) takes a name, a code (suggested from
+    the name, editable, uppercase, at most 4 characters) and a colour, then **Draw Area**.
+  * The properties panel for a selected zone edits:
+    * the type/preset (picking one copies its code, name and colour; "Custom" detaches it);
+    * name, code and colour;
+    * width and depth;
+    * Duplicate and Delete.
+    Editing never moves the zone.
+* **Visibility**: `ProjectSettings.showSurveyFindings` and `showRecommendedWorks` (per browser).
+  Exports follow both through `surveyPlanView()`.
+* **Persistence**:
+  * Both layers are part of `project_data`, so save, reopen, recovery and duplicate carry them
+    unchanged.
+  * `schema_version` stays 1: the new fields are optional. `readProject()` fills older zones' name,
+    colour and preset from their preset code on load.
+
+Not done in Stage 4 (Stage 5 and later):
+
+* Legend and branded exports, notes in the UI, polygons and rotation, and admin preset editing.
+* Code labels can overlap when a recommendation's top-right corner sits on a finding's top-left code.
+  Stage 5 label placement should avoid this.
