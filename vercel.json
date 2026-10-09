@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "sveltekit",
+  "installCommand": "npm ci --include=dev",
+  "buildCommand": "NODE_ENV=production npm run build"
+}
