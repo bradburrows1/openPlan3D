@@ -22,7 +22,7 @@
 {:else}
   <main class="min-h-screen flex items-center justify-center bg-slate-50 px-4">
     <div class="max-w-sm w-full text-center space-y-4" data-auth-gate={$authState.status}>
-      <img src="/northway-logo.svg" alt="Northway Preservation" class="h-8 mx-auto" />
+      {#if $authState.status !== 'loading'}<img src="/northway-logo.svg" alt="Northway Preservation" class="h-8 mx-auto" />{/if}
       {#if $authState.status === 'unconfigured'}
         <p role="alert" class="text-sm text-slate-700">Northway Plans is not connected to its database yet. Set <code>PUBLIC_SUPABASE_URL</code> and <code>PUBLIC_SUPABASE_PUBLISHABLE_KEY</code> (see SUPABASE_SETUP.md).</p>
       {:else if $authState.status === 'not-staff'}

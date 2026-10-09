@@ -4,6 +4,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deploymentServer } from './deployment-server';
 import { failProjectWrites, savedProjects } from './storage';
+import { readFileSync } from 'node:fs';
+import { SIGNED_IN_STATE } from './northway-stack';
+
+// Northway: this spec serves the app through its own proxy origin, so give that
+// origin the same signed-in staff session the rest of the suite uses.
+test.beforeEach(async ({ page }) => {
+  const stored = JSON.parse(readFileSync(SIGNED_IN_STATE, 'utf8')).origins[0].localStorage as { name: string; value: string }[];
+  await page.addInitScript(entries => {
+    for (const { name, value } of entries) if (localStorage.getItem(name) === null) localStorage.setItem(name, value);
+  }, stored);
+});
 
 // WebKit's temporary contexts have no disk cache. Use a private, disposable
 // persistent profile for the cache regression, consistently in all engines.
@@ -144,7 +155,7 @@ for (const locale of ['en', 'pt']) test(`${locale}: update reload preserves fail
     await page.evaluate(() => { (window as any).failProjectWrites = false; });
     server.serve(server.current);
     await page.getByRole('button', { name: locale === 'pt' ? 'Salvar e recarregar' : 'Save and reload', exact: true }).click();
-    await expect(page).toHaveURL(`${server.url}/`);
+    await expect(page).toHaveURL(`${server.url}/local`); // Northway: the local library moved to /local
     expect((await savedProjects(page))['qa-deployment-save'].name).toBe(backup.name);
   } finally { await server.close(); }
 });
