@@ -20,8 +20,10 @@
   import { getCatalogItem } from '$lib/utils/furnitureCatalog';
   import { projectSettings, formatLength, formatArea, parseLengthInput } from '$lib/stores/settings';
   import { isTechnicalStyle } from '$lib/utils/planStyle';
-  import { SURVEY_FINDING_PRESETS, surveyFindingPreset, surveyFindingColor, rgba, FILL_OPACITY, BORDER_OPACITY } from '$lib/northway/surveyPresets';
-  import { updateSurveyFinding, duplicateSurveyFinding, removeSurveyFinding } from '$lib/northway/surveyStore';
+  import { cleanCode, presetsFor, zoneAppearance } from '$lib/northway/zonePresets';
+  import { applyZonePreset, duplicateZone, floorZones, removeZone, updateZone } from '$lib/northway/overlayStore';
+  import ZoneSwatch from '$lib/northway/components/ZoneSwatch.svelte';
+  import ZoneColourPicker from '$lib/northway/components/ZoneColourPicker.svelte';
     import type { Floor, Wall, Door, Window as Win, Room, FurnitureItem, Stair, Column, RoomCategory, TextAnnotation } from '$lib/models/types';
   import { getWallStartHeight, getWallEndHeight } from '$lib/models/types';
 
@@ -59,7 +61,8 @@
   let selectedTextAnnotation = $derived(floor?.textAnnotations?.find(t => t.id === selId) ?? null);
   let selectedEntourage = $derived(floor?.entourage?.find(en => en.id === selId) ?? null);
   // Northway: a selected Survey Findings issue area (only while the layer is shown).
-  let selectedZone = $derived(settings.showSurveyFindings === false ? null : floor?.surveyFindings?.find(zone => zone.id === selId) ?? null);
+  let selectedZone = $derived(floorZones(floor ?? undefined).find(zone => zone.id === selId
+    && (zone.layer === 'survey-findings' ? settings.showSurveyFindings !== false : settings.showRecommendedWorks !== false)) ?? null);
   let hasBgImage = $derived(!!floor?.backgroundImage);
   let selectedRoom = $derived(floor && selRoomId
     ? resolveRooms(floor, detectedRooms).find(r => r.id === selRoomId) ?? null
@@ -872,33 +875,58 @@
     </div>
 
   {:else if selectedZone}
+    {@const zone = selectedZone}
+    {@const look = zoneAppearance(zone)}
+    {@const findingZone = zone.layer === 'survey-findings'}
     <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-      <span class="w-6 h-4 rounded-sm border-[1.5px]" style="background: {rgba(surveyFindingColor(selectedZone.code), FILL_OPACITY)}; border-color: {rgba(surveyFindingColor(selectedZone.code), BORDER_OPACITY)}"></span>
-      {$t('northway.issueArea')}
+      <ZoneSwatch layer={zone.layer} color={look.color} />
+      {findingZone ? $t('northway.issueArea') : $t('northway.recommendedArea')}
     </h3>
-    <div class="space-y-3" data-issue-area-properties>
+    <div class="space-y-3" data-issue-area-properties={findingZone ? '' : undefined} data-recommended-area-properties={findingZone ? undefined : ''}>
       <label class="block">
-        <span class="text-xs text-gray-500">{$t('northway.issueType')}</span>
-        <select value={selectedZone.code} onchange={(e) => { if (selectedZone) updateSurveyFinding(selectedZone.id, { code: (e.target as HTMLSelectElement).value }); }} class="w-full px-2 py-1 border border-gray-200 rounded text-sm">
-          {#each SURVEY_FINDING_PRESETS as preset}
-            <option value={preset.code}>{preset.code} — {$t(`northway.preset.${preset.code}` as TranslationKey)}</option>
+        <span class="text-xs text-gray-500">{findingZone ? $t('northway.issueType') : $t('northway.workType')}</span>
+        <select value={zone.preset ?? ''} onchange={(e) => {
+          const value = (e.target as HTMLSelectElement).value;
+          if (value) applyZonePreset(zone.id, value); else updateZone(zone.id, { preset: null });
+        }} class="w-full px-2 py-1 border border-gray-200 rounded text-sm">
+          {#each presetsFor(zone.layer) as preset (preset.code)}
+            <option value={preset.code}>{preset.code} — {preset.name}</option>
           {/each}
-          {#if !surveyFindingPreset(selectedZone.code)}<option value={selectedZone.code}>{selectedZone.code}</option>{/if}
+          {#if zone.preset && !presetsFor(zone.layer).some(preset => preset.code === zone.preset)}<option value={zone.preset}>{zone.preset}</option>{/if}
+          <option value="">{$t('northway.customType')}</option>
         </select>
       </label>
+      <div class="grid grid-cols-[1fr_5rem] gap-2">
+        <label class="block">
+          <span class="text-xs text-gray-500">{$t('northway.zoneName')}</span>
+          <input value={zone.name ?? look.name} maxlength="80" class="w-full px-2 py-1 border border-gray-200 rounded text-sm"
+            oninput={(e) => updateZone(zone.id, { name: (e.target as HTMLInputElement).value })}
+            onblur={(e) => { const input = e.target as HTMLInputElement; if (!input.value.trim()) { input.value = look.name; } }} />
+        </label>
+        <label class="block">
+          <span class="text-xs text-gray-500">{$t('northway.zoneCode')}</span>
+          <input value={zone.code} autocomplete="off" spellcheck="false" class="w-full px-2 py-1 border border-gray-200 rounded text-sm font-semibold uppercase"
+            oninput={(e) => { const input = e.target as HTMLInputElement, code = cleanCode(input.value); input.value = code; if (code) updateZone(zone.id, { code }); }}
+            onblur={(e) => { (e.target as HTMLInputElement).value = zone.code; }} />
+        </label>
+      </div>
+      <div>
+        <span class="block text-xs text-gray-500 mb-1.5">{$t('northway.zoneColour')}</span>
+        <ZoneColourPicker value={look.color} onchange={(color) => updateZone(zone.id, { color })} />
+      </div>
       <div class="grid grid-cols-2 gap-2">
         <label class="block">
           <span class="text-xs text-gray-500">{$t('northway.zoneWidth')} ({unitLabel()})</span>
-          <input type="number" value={displayValue(selectedZone.width)} oninput={(e) => dimensionInput(e, selectedZone!.width, value => updateSurveyFinding(selectedZone!.id, { width: value }))} onblur={(e) => dimensionInput(e, selectedZone!.width, value => updateSurveyFinding(selectedZone!.id, { width: value }))} min={settings.units === 'imperial' ? 1 / 2.54 : 1} step="any" class="w-full px-2 py-1 border border-gray-200 rounded text-sm" />
+          <input type="number" value={displayValue(zone.width)} oninput={(e) => dimensionInput(e, zone.width, value => updateZone(zone.id, { width: value }))} onblur={(e) => dimensionInput(e, zone.width, value => updateZone(zone.id, { width: value }))} min={settings.units === 'imperial' ? 1 / 2.54 : 1} step="any" class="w-full px-2 py-1 border border-gray-200 rounded text-sm" />
         </label>
         <label class="block">
           <span class="text-xs text-gray-500">{$t('northway.zoneDepth')} ({unitLabel()})</span>
-          <input type="number" value={displayValue(selectedZone.height)} oninput={(e) => dimensionInput(e, selectedZone!.height, value => updateSurveyFinding(selectedZone!.id, { height: value }))} onblur={(e) => dimensionInput(e, selectedZone!.height, value => updateSurveyFinding(selectedZone!.id, { height: value }))} min={settings.units === 'imperial' ? 1 / 2.54 : 1} step="any" class="w-full px-2 py-1 border border-gray-200 rounded text-sm" />
+          <input type="number" value={displayValue(zone.height)} oninput={(e) => dimensionInput(e, zone.height, value => updateZone(zone.id, { height: value }))} onblur={(e) => dimensionInput(e, zone.height, value => updateZone(zone.id, { height: value }))} min={settings.units === 'imperial' ? 1 / 2.54 : 1} step="any" class="w-full px-2 py-1 border border-gray-200 rounded text-sm" />
         </label>
       </div>
       <div class="flex gap-2">
-        <button onclick={() => { if (selectedZone) { const copy = duplicateSurveyFinding(selectedZone.id); if (copy) selectedElementId.set(copy); } }} class="flex-1 px-2 py-1.5 border border-gray-200 rounded text-sm hover:bg-gray-50 transition-colors">{$t('northway.duplicate')}</button>
-        <button onclick={() => { if (selectedZone) { removeSurveyFinding(selectedZone.id); selectedElementId.set(null); } }} class="flex-1 px-2 py-1.5 border border-red-200 text-red-600 rounded text-sm hover:bg-red-50 transition-colors">{$t('northway.delete')}</button>
+        <button onclick={() => { const copy = duplicateZone(zone.id); if (copy) selectedElementId.set(copy); }} class="flex-1 px-2 py-1.5 border border-gray-200 rounded text-sm hover:bg-gray-50 transition-colors">{$t('northway.duplicate')}</button>
+        <button onclick={() => { removeZone(zone.id); selectedElementId.set(null); }} class="flex-1 px-2 py-1.5 border border-red-200 text-red-600 rounded text-sm hover:bg-red-50 transition-colors">{$t('northway.delete')}</button>
       </div>
     </div>
 
