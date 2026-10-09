@@ -30,6 +30,9 @@ test('survey plan: fixtures only, issue areas, layer toggle, save and export', a
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/editor');
+  // The browser suite starts in the full library for upstream specs; use the app default.
+  await page.evaluate(() => localStorage.setItem('o3d_settings', JSON.stringify({ objectLibrary: 'survey' })));
+  await page.reload();
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeVisible();
   await importPlan(page, 'test-roomplan.json');
   const status = page.getByRole('application');

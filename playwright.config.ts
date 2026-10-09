@@ -18,6 +18,9 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: 'http://127.0.0.1:4188',
+    // Northway: upstream specs exercise the full furniture catalogue. Northway specs
+    // switch themselves to the survey object library (the app default).
+    storageState: 'tests/browser/upstream-storage-state.json',
     viewport: { width: 1440, height: 900 },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
