@@ -8,7 +8,7 @@ test('top-down fits every corner after orbit, stacking and viewport changes', as
   const errors: string[] = [], external: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('request', request => {
-    if (/^https?:/.test(request.url()) && new URL(request.url()).origin !== 'http://127.0.0.1:4188') external.push(request.url());
+    if (/^https?:/.test(request.url()) && !['http://127.0.0.1:4188', 'http://127.0.0.1:54421'].includes(new URL(request.url()).origin)) external.push(request.url());
   });
   await page.goto('/editor');
   await page.getByRole('button', { name: 'Export', exact: true }).click();

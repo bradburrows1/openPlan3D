@@ -23,7 +23,7 @@ async function seed(page: Page, locale = 'en') {
 function observe(page: Page) {
   const errors: string[] = [], external: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
-  page.on('request', r => { if (/^https?:/.test(r.url()) && new URL(r.url()).origin !== 'http://127.0.0.1:4188') external.push(r.url()); });
+  page.on('request', r => { if (/^https?:/.test(r.url()) && !['http://127.0.0.1:4188', 'http://127.0.0.1:54421'].includes(new URL(r.url()).origin)) external.push(r.url()); });
   return () => { expect(errors).toEqual([]); expect(external).toEqual([]); };
 }
 async function toolbar(page: Page, name: string) {
@@ -168,7 +168,7 @@ for (const locale of ['en', 'pt']) for (const width of [1440, 390]) test(`${loca
   await page.keyboard.press('Tab'); await focusInside(page, locale === 'pt' ? 'Importar RoomPlan' : 'Import RoomPlan');
   await page.keyboard.press('Escape'); await expect(dialog).toHaveCount(0);
   expect(await storedRecords(page)).toEqual(before);
-  await page.goto('/');
+  await page.goto('/local');
   await page.getByRole('button', { name: locale === 'pt' ? 'Modelos' : 'Templates', exact: true }).press('Enter');
   const templates = await focusInside(page, locale === 'pt' ? 'Modelos de Planta Baixa' : 'Floor Plan Templates');
   await page.keyboard.press('Shift+Tab'); await focusInside(page, locale === 'pt' ? 'Modelos de Planta Baixa' : 'Floor Plan Templates');

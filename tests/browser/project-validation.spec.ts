@@ -21,7 +21,7 @@ function observe(page: Page) {
   const errors: string[] = [], external: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('request', request => {
-    if (/^https?:/.test(request.url()) && new URL(request.url()).origin !== 'http://127.0.0.1:4188') external.push(request.url());
+    if (/^https?:/.test(request.url()) && !['http://127.0.0.1:4188', 'http://127.0.0.1:54421'].includes(new URL(request.url()).origin)) external.push(request.url());
   });
   return () => { expect(errors).toEqual([]); expect(external).toEqual([]); };
 }
@@ -79,7 +79,7 @@ for (const width of [1440, 390]) {
 test('welcome import recovers from a damaged file and accepts missing legacy fields', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   const check = observe(page);
-  await page.goto('/');
+  await page.goto('/local');
   const importButton = page.getByRole('button', { name: /Import a Plan/ });
   const pending = page.waitForEvent('filechooser'); await importButton.click();
   await (await pending).setFiles(damagedFixture);
@@ -149,7 +149,7 @@ test('a damaged version stays available for backup and cannot replace the curren
 
 test('welcome import accepts the advertised iPhone RoomPlan JSON locally', async ({ page }) => {
   const check = observe(page);
-  await page.goto('/');
+  await page.goto('/local');
   const pending = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: /Import a Plan/ }).click();
   await (await pending).setFiles(resolve('tests/fixtures/handoff-roomplan.json'));

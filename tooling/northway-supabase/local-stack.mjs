@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck -- plain Node tooling script, not part of the app bundle
 /**
  * LOCAL TEST STACK ONLY: a throwaway, Supabase-compatible backend for tests and
  * local development of Northway Plans. Never point it at real data.
@@ -42,9 +43,14 @@ export function signJwt(payload, secret) {
   return `${head}.${body}.${createHmac('sha256', secret).update(`${head}.${body}`).digest('base64url')}`;
 }
 
+/** The project's public API key for a stack secret (deterministic, so test servers can be configured up front). */
+export function localAnonKey(secret) {
+  return signJwt({ role: 'anon', iss: 'northway-local', iat: 1_700_000_000, exp: 4_102_444_800 }, secret);
+}
+
 function pgBin() {
   if (process.env.NORTHWAY_PG_BIN) return process.env.NORTHWAY_PG_BIN;
-  for (const version of ['17', '16', '15']) {
+  for (const version of ['17', '16', '15', '14']) {
     const dir = `/usr/lib/postgresql/${version}/bin`;
     if (existsSync(join(dir, 'initdb'))) return dir;
   }
@@ -112,7 +118,7 @@ function gateway({ port, authPort, restPort, keys }) {
 }
 
 /** Start everything; resolves once accounts exist. Call stop() to tear down. */
-export async function startLocalStack({ port = 54321, quiet = true } = {}) {
+export async function startLocalStack({ port = 54321, quiet = true, jwtSecret: fixedSecret } = {}) {
   const gotrueBin = process.env.NORTHWAY_GOTRUE_BIN ?? join(localDir, 'auth', 'auth');
   const gotrueMigrations = process.env.NORTHWAY_GOTRUE_MIGRATIONS ?? join(localDir, 'auth', 'migrations');
   const postgrestBin = process.env.NORTHWAY_POSTGREST_BIN ?? join(localDir, 'postgrest');
@@ -120,9 +126,9 @@ export async function startLocalStack({ port = 54321, quiet = true } = {}) {
     if (!existsSync(path)) throw new Error(`${label} not found at ${path}. Run tooling/northway-supabase/fetch-binaries.sh first.`);
   }
   const pgPort = port + 1, authPort = port + 2, restPort = port + 3;
-  const jwtSecret = randomBytes(32).toString('hex');
+  const jwtSecret = fixedSecret ?? randomBytes(32).toString('hex');
+  const anonKey = localAnonKey(jwtSecret);
   const now = Math.floor(Date.now() / 1000);
-  const anonKey = signJwt({ role: 'anon', iss: 'northway-local', iat: now, exp: now + 86_400 }, jwtSecret);
   const serviceKey = signJwt({ role: 'service_role', iss: 'northway-local', iat: now, exp: now + 86_400 }, jwtSecret);
 
   const dataDir = mkdtempSync(join(tmpdir(), 'northway-supabase-'));

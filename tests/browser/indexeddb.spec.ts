@@ -9,7 +9,7 @@ test('legacy migration preserves images and history, then saves beyond the old q
   const legacy = JSON.stringify({ [source.id]: JSON.stringify(source) });
   const errors: string[] = [], external: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  page.on('request', request => { if (/^https?:/.test(request.url()) && new URL(request.url()).origin !== 'http://127.0.0.1:4188') external.push(request.url()); });
+  page.on('request', request => { if (/^https?:/.test(request.url()) && !['http://127.0.0.1:4188', 'http://127.0.0.1:54421'].includes(new URL(request.url()).origin)) external.push(request.url()); });
   await page.addInitScript(({ legacy, history, id }) => {
     if (!localStorage.getItem('floorplan_projects')) {
       localStorage.setItem('floorplan_projects', legacy);
@@ -18,7 +18,7 @@ test('legacy migration preserves images and history, then saves beyond the old q
       localStorage.setItem('hasSeenWelcome', 'true');
     }
   }, { legacy, history, id: source.id });
-  await page.goto('/');
+  await page.goto('/local');
   await expect(page.getByRole('link', { name: source.name, exact: true })).toBeVisible();
   expect((await storedRecords(page, 'history'))[source.id]).toBe(history);
   expect((await storedRecords(page, 'thumbnails'))[source.id]).toContain('data:image/gif');
@@ -66,7 +66,7 @@ test('interrupted migration leaves legacy bytes recoverable and retries without 
       return add.apply(this, args);
     };
   }, legacy);
-  await page.goto('/');
+  await page.goto('/local');
   await expect(page.getByRole('alert')).toContainText('Browser storage is full');
   expect(await storedRecords(page)).toEqual({});
   const pending = page.waitForEvent('download');
@@ -91,7 +91,7 @@ test('late writes from an older release produce a visible recovery copy', async 
   await page.getByRole('textbox', { name: 'Project name' }).press('Enter');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText('Saved ✓', { exact: true })).toBeVisible();
-  const older = await context.newPage(); await older.goto('/');
+  const older = await context.newPage(); await older.goto('/local');
   await older.evaluate(source => localStorage.setItem('floorplan_projects', JSON.stringify({ [source.id]: JSON.stringify({ ...source, name: 'Older release edit' }) })), source);
   await page.getByRole('link', { name: 'Projects', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Older release edit (Recovered from older tab)', exact: true })).toBeVisible();

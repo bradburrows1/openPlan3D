@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 
 for (const width of [1440, 390]) test(`RoomPlan confirmation preserves geometry across languages at ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 });
-  await page.goto('/');
+  await page.goto('/local');
   let expected: unknown;
   for (const locale of ['en', 'pt']) {
     await page.evaluate(locale => localStorage.setItem('o3d_locale', locale), locale);

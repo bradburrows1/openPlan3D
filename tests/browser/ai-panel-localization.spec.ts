@@ -5,7 +5,7 @@ test('Portuguese AI choices preserve provider prompt values without sending an i
   await page.addInitScript(() => localStorage.setItem('o3d_locale', 'pt'));
   const external: string[] = [];
   await page.route(/^https?:\/\//, route => {
-    if (new URL(route.request().url()).origin !== 'http://127.0.0.1:4188') { external.push(route.request().url()); return route.abort(); }
+    if (!['http://127.0.0.1:4188', 'http://127.0.0.1:54421'].includes(new URL(route.request().url()).origin)) { external.push(route.request().url()); return route.abort(); }
     return route.continue();
   });
   await page.goto('/editor');

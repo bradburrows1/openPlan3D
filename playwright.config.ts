@@ -1,8 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
+import { SIGNED_IN_STATE, TEST_PUBLISHABLE_KEY, TEST_SUPABASE_URL } from './tests/browser/northway-stack';
 
-// Use the real Node production build. Each test gets an empty browser profile;
-// no credentials or Firebase services are needed.
+// Use the real Node production build. Each test gets a fresh browser profile.
+// Northway: global setup runs a local Supabase stack (tooling/northway-supabase;
+// run fetch-binaries.sh once) and signs in a staff account; no cloud services are used.
 export default defineConfig({
+  globalSetup: './tests/browser/global-setup.ts',
   testDir: './tests/browser',
   testMatch: '**/*.spec.ts',
   fullyParallel: false,
@@ -18,9 +21,9 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: 'http://127.0.0.1:4188',
-    // Northway: upstream specs exercise the full furniture catalogue. Northway specs
-    // switch themselves to the survey object library (the app default).
-    storageState: 'tests/browser/upstream-storage-state.json',
+    // Northway: upstream specs run signed in, in the full furniture catalogue. Northway
+    // specs switch to the survey library or start signed out themselves.
+    storageState: SIGNED_IN_STATE,
     viewport: { width: 1440, height: 900 },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
@@ -46,6 +49,7 @@ export default defineConfig({
       ORIGIN: 'http://127.0.0.1:4188', PUBLIC_ENABLE_ANALYTICS: 'false',
       HANDOFF_UPLOADS_ENABLED: 'false', HANDOFF_BUCKET: '',
       BODY_SIZE_LIMIT: '2M',
+      PUBLIC_SUPABASE_URL: TEST_SUPABASE_URL, PUBLIC_SUPABASE_PUBLISHABLE_KEY: TEST_PUBLISHABLE_KEY,
     },
   },
 });

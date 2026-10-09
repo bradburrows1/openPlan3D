@@ -33,7 +33,7 @@ function observe(page: Page) {
   const errors: string[] = [], external: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('request', r => {
-    if (/^https?:/.test(r.url()) && new URL(r.url()).origin !== 'http://127.0.0.1:4188') external.push(r.url());
+    if (/^https?:/.test(r.url()) && !['http://127.0.0.1:4188', 'http://127.0.0.1:54421'].includes(new URL(r.url()).origin)) external.push(r.url());
   });
   return () => { expect(errors).toEqual([]); expect(external).toEqual([]); };
 }
@@ -92,7 +92,7 @@ test('deleting a library project cannot be undone by an older editor autosave', 
   const check = observe(page), checkLibrary = observe(library);
   await page.goto(`/editor?id=${source.id}`);
   await expect(page.getByRole('application')).toContainText('1 room');
-  await library.goto('/');
+  await library.goto('/local');
   await library.getByRole('button', { name: `Project actions for ${source.name}`, exact: true }).click();
   await library.getByRole('menuitem', { name: 'Delete', exact: true }).click();
   await library.getByRole('dialog', { name: 'Delete project', exact: true }).getByRole('button', { name: 'Delete project', exact: true }).click();

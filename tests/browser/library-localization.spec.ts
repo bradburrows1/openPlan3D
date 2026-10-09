@@ -13,7 +13,7 @@ test('Portuguese library menus rename without changing geometry and cancel delet
     localStorage.setItem('o3d_locale', 'pt');
   }, project);
   await page.setViewportSize({ width: 390, height: 900 });
-  await page.goto('/');
+  await page.goto('/local');
   await expect(page.getByRole('heading', { name: 'Editor de plantas', exact: true })).toBeVisible();
   await expect(page.getByText('1 projeto', { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);

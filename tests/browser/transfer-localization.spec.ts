@@ -8,7 +8,7 @@ test('Portuguese package rejection leaves saved records unchanged and allows ano
     localStorage.setItem('hasSeenWelcome', 'true');
     localStorage.setItem('o3d_locale', 'pt');
   });
-  await page.goto('/');
+  await page.goto('/local');
   await expect(page.getByText('Nenhum projeto ainda', { exact: true })).toBeVisible();
   const before = await storedRecords(page);
   await page.getByRole('button', { name: 'Importar pacote de projeto', exact: true }).click();
@@ -67,7 +67,7 @@ test('Portuguese recovery preview explains damage and preserves the backup', asy
     localStorage.setItem('o3d_locale', 'pt');
   });
   await page.setViewportSize({ width: 390, height: 900 });
-  await page.goto('/');
+  await page.goto('/local');
   await expect(page.getByText('Nenhum projeto ainda', { exact: true })).toBeVisible();
   const before = await storedRecords(page);
   await page.getByRole('button', { name: 'Restaurar backup da biblioteca', exact: true }).click();
@@ -108,7 +108,7 @@ test('Portuguese backup rejection preserves each original file and saved records
     localStorage.setItem('o3d_locale', 'pt');
   });
   await page.setViewportSize({ width: 390, height: 900 });
-  await page.goto('/');
+  await page.goto('/local');
   await expect(page.getByText('Nenhum projeto ainda', { exact: true })).toBeVisible();
   const before = await storedRecords(page);
   const history = await storedRecords(page, 'history');
@@ -142,7 +142,7 @@ for (const flow of [
       localStorage.setItem('o3d_locale', 'pt');
     });
     await page.setViewportSize({ width: 390, height: 900 });
-    await page.goto('/');
+    await page.goto('/local');
     await expect(page.getByText('Nenhum projeto ainda', { exact: true })).toBeVisible();
     const before = await storedRecords(page);
     const historyBefore = await storedRecords(page, 'history');

@@ -6,7 +6,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { existsSync } from 'node:fs';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-// @ts-expect-error -- plain ESM tooling module without type declarations
 import { startLocalStack, LOCAL_STAFF, LOCAL_OUTSIDER } from '../tooling/northway-supabase/local-stack.mjs';
 import { createDefaultProject } from '$lib/stores/project';
 import { createProjectFromRoomPlan } from '$lib/utils/roomplanImport';
@@ -99,6 +98,7 @@ describe.skipIf(!available)('Northway Plans with Supabase Auth, PostgREST and RL
       { id: 'z2', layer: 'survey-findings', code: 'WM', shape: 'rect', x: 200, y: 50, width: 60, height: 60 },
     ];
     const created = await createProject(brad, { project_name: 'Stage 3 Test Property' }, imported);
+    expect((created.project_data as any).id).toBe(created.id); // the document carries its row id
     const reopened = documentToProject((await getProject(brad, created.id))!);
     expect(reopened.id).toBe(created.id);
     expect(reopened.name).toBe('Stage 3 Test Property');
@@ -143,6 +143,7 @@ describe.skipIf(!available)('Northway Plans with Supabase Auth, PostgREST and RL
     const copy = await duplicateProject(brad, created.id);
     expect(copy.id).not.toBe(created.id);
     expect(copy).toMatchObject({ project_name: 'Jones - Woodworm Survey (Copy)', customer_name: 'Jones' });
+    expect(((await getProject(brad, copy.id))!.project_data as any).id).toBe(copy.id);
     const copyProject = documentToProject((await getProject(brad, copy.id))!);
     copyProject.floors[0].surveyFindings = [];
     await saveProject(brad, copy.id, 1, copyProject, copy.project_name);

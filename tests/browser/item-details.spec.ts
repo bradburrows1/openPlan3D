@@ -9,7 +9,7 @@ const fixture = resolve('tests/fixtures/native-project-package.zip');
 function observe(page: Page) {
   const errors: string[] = [], external: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  page.on('request', request => { if (/^https?:/.test(request.url()) && new URL(request.url()).origin !== 'http://127.0.0.1:4188') external.push(request.url()); });
+  page.on('request', request => { if (/^https?:/.test(request.url()) && !['http://127.0.0.1:4188', 'http://127.0.0.1:54421'].includes(new URL(request.url()).origin)) external.push(request.url()); });
   return () => { expect(errors).toEqual([]); expect(external).toEqual([]); };
 }
 async function choose(page: Page, button: string, path: string) {
@@ -17,7 +17,7 @@ async function choose(page: Page, button: string, path: string) {
   await (await pending).setFiles(path);
 }
 async function openPackage(page: Page, path = fixture) {
-  await page.goto('/'); await page.getByRole('button', { name: 'Import a project package', exact: true }).click();
+  await page.goto('/local'); await page.getByRole('button', { name: 'Import a project package', exact: true }).click();
   await choose(page, 'Choose project package', path);
   await page.getByRole('button', { name: 'Import as copy', exact: true }).click();
   await expect(page.getByRole('dialog').getByRole('status')).toContainText('Project imported.');

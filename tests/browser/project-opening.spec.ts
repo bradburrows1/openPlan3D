@@ -41,7 +41,7 @@ function observe(page: Page) {
   const errors: string[] = [], external: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('request', r => {
-    if (/^https?:/.test(r.url()) && new URL(r.url()).origin !== 'http://127.0.0.1:4188') external.push(r.url());
+    if (/^https?:/.test(r.url()) && !['http://127.0.0.1:4188', 'http://127.0.0.1:54421'].includes(new URL(r.url()).origin)) external.push(r.url());
   });
   return () => { expect(errors).toEqual([]); expect(external).toEqual([]); };
 }
@@ -173,7 +173,7 @@ test('leaving the editor cancels a slow import before it can replace a library p
 
 test('welcome and library templates create independent saved projects', async ({ page }) => {
   const check = observe(page);
-  await page.goto('/');
+  await page.goto('/local');
   await page.getByRole('button', { name: /Use a Template/ }).click();
   await page.getByRole('button', { name: /Studio Apartment/ }).click();
   await expect(page.getByRole('application')).toContainText('walls');

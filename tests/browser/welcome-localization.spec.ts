@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('Portuguese welcome recovers from invalid JSON and creates the selected template', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/local');
   await expect(page.getByRole('heading', { name: 'Bem-vindo', exact: true })).toBeVisible();
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: /Importar uma Planta/ }).click();
@@ -31,7 +31,7 @@ test('Portuguese welcome recovers from invalid JSON and creates the selected tem
 });
 
 test('Portuguese quick tour completes and remains dismissed after reload', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/local');
   await page.getByRole('button', { name: /Tour Rápido/ }).click();
   for (let step = 0; step < 3; step++) await page.getByRole('button', { name: 'Próximo', exact: true }).click();
   await page.getByRole('button', { name: 'Começar', exact: true }).click();

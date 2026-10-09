@@ -16,14 +16,14 @@ async function seed(page: Page) {
     }
     localStorage.setItem('hasSeenWelcome', 'true');
   }, [project, second]);
-  await page.goto('/');
+  await page.goto('/local');
   await expect(page.getByRole('link', { name: project.name, exact: true })).toBeVisible();
   return project;
 }
 function observe(page: Page) {
   const errors: string[] = [], external: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
-  page.on('request', r => { if (/^https?:/.test(r.url()) && new URL(r.url()).origin !== 'http://127.0.0.1:4188') external.push(r.url()); });
+  page.on('request', r => { if (/^https?:/.test(r.url()) && !['http://127.0.0.1:4188', 'http://127.0.0.1:54421'].includes(new URL(r.url()).origin)) external.push(r.url()); });
   return () => { expect(errors).toEqual([]); expect(external).toEqual([]); };
 }
 function trigger(page: Page, name = 'QA Library Actions') {
