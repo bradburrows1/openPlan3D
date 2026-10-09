@@ -25,6 +25,8 @@ import { get } from 'svelte/store';
 import jsPDF from 'jspdf';
 import { surveyPlanView } from '$lib/northway/planView';
 import { TECHNICAL_FIXTURE } from '$lib/northway/fixtures';
+import { drawSurveyFindingAreas, drawSurveyFindingCodes } from '$lib/northway/surveyRenderer';
+import { rgba, surveyFindingColor, FILL_OPACITY, BORDER_OPACITY, BORDER_WIDTH } from '$lib/northway/surveyPresets';
 import { exportRoomFill, isTechnicalStyle, TECHNICAL } from './planStyle';
 
 /** Escape text for safe SVG embedding */
@@ -80,6 +82,14 @@ function extendBoundsForRoomLabels(floor: Floor, bounds: { minX: number; minY: n
     bounds.maxX = Math.max(bounds.maxX, anchor.x + width / 2);
     bounds.minY = Math.min(bounds.minY, anchor.y - 13);
     bounds.maxY = Math.max(bounds.maxY, anchor.y + 18);
+  }
+}
+
+/** Northway: issue areas can reach beyond the walls. */
+function extendBoundsForSurveyFindings(floor: Floor, bounds: { minX: number; minY: number; maxX: number; maxY: number }) {
+  for (const zone of floor.surveyFindings ?? []) {
+    bounds.minX = Math.min(bounds.minX, zone.x - 2); bounds.minY = Math.min(bounds.minY, zone.y - 2);
+    bounds.maxX = Math.max(bounds.maxX, zone.x + zone.width + 2); bounds.maxY = Math.max(bounds.maxY, zone.y + zone.height + 2);
   }
 }
 
@@ -216,6 +226,7 @@ export async function exportAsPNG(canvas: HTMLCanvasElement | null, project?: Pr
       extendBoundsForText(floor, bounds);
       extendBoundsForDimensions(floor, bounds);
       extendBoundsForMeasurements(floor, bounds);
+      extendBoundsForSurveyFindings(floor, bounds);
       ({ minX, minY, maxX, maxY } = bounds);
       const pad = 80;
       const w = maxX - minX + pad * 2;
@@ -258,6 +269,10 @@ export async function exportAsPNG(canvas: HTMLCanvasElement | null, project?: Pr
         ctx.fillText(formatArea(room.area, get(projectSettings).units), c.x - minX + pad, c.y - minY + pad + 14);
       }
 
+      // Northway: issue areas above room fills, below walls (same renderer as the editor).
+      const zoneState = { ctx, width: pad * 2, height: pad * 2, zoom: 1, camX: minX, camY: minY };
+      drawSurveyFindingAreas(zoneState, floor.surveyFindings ?? []);
+
       // Draw walls
       ctx.strokeStyle = '#333';
       ctx.lineCap = 'round';
@@ -285,6 +300,7 @@ export async function exportAsPNG(canvas: HTMLCanvasElement | null, project?: Pr
 
       // Draw doors and windows (shared full-fidelity renderer)
       drawOpeningsOnCanvas(ctx, floor, minX, minY, pad);
+      drawSurveyFindingCodes(zoneState, floor.surveyFindings ?? []);
 
       for (const item of floor.furniture) drawFurnitureItem({
         ctx, width: pad * 2, height: pad * 2, zoom: 1, camX: minX, camY: minY,
@@ -353,6 +369,7 @@ export function exportAsSVG(project: Project, language: Locale = 'en') {
   extendBoundsForText(floor, svgBounds);
   extendBoundsForDimensions(floor, svgBounds);
   extendBoundsForMeasurements(floor, svgBounds);
+  extendBoundsForSurveyFindings(floor, svgBounds);
   ({ minX, minY, maxX, maxY } = svgBounds);
   const pad = 50;
   const vw = maxX - minX + pad * 2;
@@ -381,6 +398,14 @@ export function exportAsSVG(project: Project, language: Locale = 'en') {
     const cy = c.y - minY + pad;
     paths += `  <text x="${cx}" y="${cy}" text-anchor="middle" font-size="12" fill="${technical ? TECHNICAL.roomLabel : '#444'}" font-family="sans-serif" font-weight="bold">${escapeXml(room.name)}</text>\n`;
     paths += `  <text x="${cx}" y="${cy + 14}" text-anchor="middle" font-size="10" fill="${technical ? TECHNICAL.roomSubLabel : '#888'}" font-family="sans-serif">${formatArea(room.area, get(projectSettings).units)}</text>\n`;
+  }
+
+  // Northway: issue areas above room fills, below walls; codes are appended last.
+  let zoneCodes = '';
+  for (const zone of floor.surveyFindings ?? []) {
+    const color = surveyFindingColor(zone.code), x = zone.x - minX + pad, y = zone.y - minY + pad;
+    paths += `  <rect data-survey-finding="${escapeXml(String(zone.code))}" x="${x}" y="${y}" width="${zone.width}" height="${zone.height}" fill="${rgba(color, FILL_OPACITY)}" stroke="${rgba(color, BORDER_OPACITY)}" stroke-width="${BORDER_WIDTH}"/>\n`;
+    zoneCodes += `  <text x="${x + 5}" y="${y + 4}" dominant-baseline="hanging" font-size="11" font-weight="600" fill="${rgba(color, 0.95)}" font-family="sans-serif">${escapeXml(String(zone.code))}</text>\n`;
   }
 
   for (const w of floor.walls) {
@@ -641,7 +666,7 @@ export function exportAsSVG(project: Project, language: Locale = 'en') {
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${vw} ${vh}" width="${vw}" height="${vh}">
   <rect width="100%" height="100%" fill="white"/>
-${paths}</svg>`;
+${paths}${zoneCodes}</svg>`;
 
   const blob = new Blob([svg], { type: 'image/svg+xml' });
   download(blob, `${project.name || 'floorplan'}.svg`);
@@ -765,6 +790,7 @@ function renderPDF(project: Project, preparedImages: ReadonlyMap<string,HTMLImag
   extendBoundsForText(floor, pdfBounds);
   extendBoundsForDimensions(floor, pdfBounds);
   extendBoundsForMeasurements(floor, pdfBounds);
+  extendBoundsForSurveyFindings(floor, pdfBounds);
   ({ minX, minY, maxX, maxY } = pdfBounds);
 
   const pad = 80;
@@ -804,6 +830,10 @@ function renderPDF(project: Project, preparedImages: ReadonlyMap<string,HTMLImag
     ctx.fillText(formatArea(room.area, settings.units), c.x - minX + pad, c.y - minY + pad + 15);
   }
 
+  // Northway: issue areas above room fills, below walls (same renderer as the editor).
+  const zoneState = { ctx, width: pad * 2, height: pad * 2, zoom: 1, camX: minX, camY: minY };
+  drawSurveyFindingAreas(zoneState, floor.surveyFindings ?? []);
+
   // Walls
   ctx.strokeStyle = '#333';
   ctx.lineCap = 'round';
@@ -830,6 +860,7 @@ function renderPDF(project: Project, preparedImages: ReadonlyMap<string,HTMLImag
 
   // Doors and windows (shared full-fidelity renderer)
   drawOpeningsOnCanvas(ctx, floor, minX, minY, pad);
+  drawSurveyFindingCodes(zoneState, floor.surveyFindings ?? []);
 
   for (const item of floor.furniture) drawFurnitureItem({
     ctx, width: pad * 2, height: pad * 2, zoom: 1, camX: minX, camY: minY,

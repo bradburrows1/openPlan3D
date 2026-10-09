@@ -8,6 +8,7 @@ import { drawRooms, drawDoorOnWall, drawWindowOnWall, drawFurnitureItem, drawSta
 import { worldToScreen, type CanvasState } from './canvasInteraction';
 import { surveyPlanView } from '$lib/northway/planView';
 import { isTechnicalStyle } from './planStyle';
+import { drawSurveyFindingAreas, drawSurveyFindingCodes } from '$lib/northway/surveyRenderer';
 import { activePrintFloor, printBounds, calculatePrintLayout, type PrintOptions } from './printLayout';
 
 const PIXELS_PER_MM = 6;
@@ -48,6 +49,7 @@ export function renderPrintPage(canvas: HTMLCanvasElement, project: Project, opt
   const cs: CanvasState = { ctx, width: area.width * PIXELS_PER_MM, height: area.height * PIXELS_PER_MM, zoom: mmPerCm * PIXELS_PER_MM, camX: center.x, camY: center.y };
   const settings = get(projectSettings);
   drawRooms(cs, floor, resolveRooms(floor), null, true, true, settings);
+  drawSurveyFindingAreas(cs, floor.surveyFindings ?? []);
   ctx.strokeStyle = '#334155';
   ctx.lineCap = 'round';
   for (const wall of floor.walls) {
@@ -62,6 +64,7 @@ export function renderPrintPage(canvas: HTMLCanvasElement, project: Project, opt
   }
   for (const door of floor.doors) { const wall = floor.walls.find(w => w.id === door.wallId); if (wall) drawDoorOnWall(cs, wall, door); }
   for (const win of floor.windows) { const wall = floor.walls.find(w => w.id === win.wallId); if (wall) drawWindowOnWall(cs, wall, win); }
+  drawSurveyFindingCodes(cs, floor.surveyFindings ?? []);
   for (const item of floor.furniture) drawFurnitureItem(cs, item, false, undefined, isTechnicalStyle(settings));
   for (const item of floor.stairs ?? []) drawStair(cs, item, false);
   for (const item of floor.columns ?? []) drawColumn(cs, item, false);
