@@ -17,6 +17,7 @@ export interface ProjectSettings {
   planStyle?: PlanStyle;                 // 2D appearance; missing means 'technical'
   objectLibrary?: ObjectLibrary;         // 'survey' hides movable furniture; missing means 'survey'
   showSurveyFindings?: boolean;          // Survey Findings layer; missing means shown
+  showRecommendedWorks?: boolean;        // Recommended Works layer; missing means shown
 }
 
 const defaultSettings: ProjectSettings = {
@@ -34,6 +35,7 @@ const defaultSettings: ProjectSettings = {
   planStyle: 'technical',
   objectLibrary: 'survey',
   showSurveyFindings: true,
+  showRecommendedWorks: true,
 };
 
 // Load from localStorage if available

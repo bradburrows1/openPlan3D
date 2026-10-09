@@ -175,7 +175,8 @@ it('loads older projects without zones unchanged and validates saved zones', () 
 
   const saved = JSON.parse(JSON.stringify(roomProject()));
   saved.floors[0].surveyFindings = [{ id: 'z1', code: 'PD', x: 5, y: 6, width: 70, height: 80 }];
-  expect(readProject(saved).floors[0].surveyFindings).toEqual([{ id: 'z1', layer: 'survey-findings', shape: 'rect', code: 'PD', x: 5, y: 6, width: 70, height: 80 }]);
+  // Stage 2 zones had no name or colour: they take their preset's.
+  expect(readProject(saved).floors[0].surveyFindings).toEqual([{ id: 'z1', layer: 'survey-findings', shape: 'rect', code: 'PD', preset: 'PD', name: 'Penetrating Damp', color: '#1f4f8f', x: 5, y: 6, width: 70, height: 80 }]);
   saved.floors[0].surveyFindings[0].width = 0;
   expect(() => readProject(saved)).toThrow(/surveyFindings\[0\]\.width/);
   saved.floors[0].surveyFindings = [{ id: saved.floors[0].walls[0].id, code: 'HM', x: 0, y: 0, width: 1, height: 1 }];
@@ -184,9 +185,11 @@ it('loads older projects without zones unchanged and validates saved zones', () 
 
 it('keeps zones through an iPhone project package round trip', () => {
   const project = roomProject() as Project;
-  project.floors[0].surveyFindings = [{ id: 'z1', layer: 'survey-findings', code: 'TD', shape: 'rect', x: 20, y: 30, width: 90, height: 40 }];
+  project.floors[0].surveyFindings = [{ id: 'z1', layer: 'survey-findings', code: 'TD', name: 'Timber Deterioration', color: '#b5534f', preset: 'TD', shape: 'rect', x: 20, y: 30, width: 90, height: 40 }];
+  project.floors[0].recommendedWorks = [{ id: 'r1', layer: 'recommended-works', code: 'OF', name: 'Open Floor for Further Inspection', color: '#2fa3a8', preset: null, shape: 'rect', x: 20, y: 30, width: 90, height: 40 }];
   const returned = readProjectPackage(projectPackageBytes(project)).project;
   expect(returned.floors[0].surveyFindings).toEqual(project.floors[0].surveyFindings);
+  expect(returned.floors[0].recommendedWorks).toEqual(project.floors[0].recommendedWorks);
 });
 
 it('exports zones and fixtures but not movable furniture in SVG', async () => {

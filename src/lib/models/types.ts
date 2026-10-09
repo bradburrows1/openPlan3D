@@ -236,21 +236,32 @@ export interface Floor {
   entourage?: EntourageItem[];
   /** Northway: observed survey issues, drawn over the plan on their own layer. */
   surveyFindings?: SurveyFindingZone[];
+  /** Northway: works recommended after the survey, on a second, separate layer. */
+  recommendedWorks?: RecommendedWorkZone[];
 }
 
-/** Northway: short code of a survey finding preset (see src/lib/northway/surveyPresets.ts). */
+/** Northway: short code of a survey finding preset (see src/lib/northway/zonePresets.ts). */
 export type SurveyFindingCode = 'HM' | 'WM' | 'DR' | 'WR' | 'MG' | 'CD' | 'PD' | 'RD' | 'TD' | 'SV';
 
+/** Northway overlay layers: what was found, and what is recommended. */
+export type OverlayLayer = 'survey-findings' | 'recommended-works';
+
 /**
- * Northway: a rectangular area where a survey issue was observed. Independent of walls
- * and rooms. x/y is the top-left corner and width/height the extent along the plan's
- * X and Y axes, all in world centimetres.
+ * Northway: a rectangular overlay area, independent of walls and rooms. x/y is the
+ * top-left corner and width/height the extent along the plan's X and Y axes, all in
+ * world centimetres. Each zone keeps its own code, name and colour: a preset is only
+ * the starting template, so editing one zone never changes the preset or other plans.
  */
-export interface SurveyFindingZone {
+interface OverlayZoneBase {
   id: string;
-  layer: 'survey-findings';
-  /** Preset code. Unknown codes from newer versions are kept and drawn in grey. */
-  code: SurveyFindingCode | (string & {});
+  /** Short code shown on the plan (HM, WT, or a custom code). */
+  code: string;
+  /** Description for the legend; filled from the preset on load when missing (Stage 2 zones). */
+  name?: string;
+  /** '#rrggbb'; the layer decides opacity, border and pattern. */
+  color?: string;
+  /** Preset code this zone started from, or null for a custom zone. */
+  preset?: string | null;
   shape: 'rect';
   x: number;
   y: number;
@@ -258,6 +269,17 @@ export interface SurveyFindingZone {
   height: number;
   note?: string;
 }
+
+export interface SurveyFindingZone extends OverlayZoneBase {
+  layer: 'survey-findings';
+  code: SurveyFindingCode | (string & {});
+}
+
+export interface RecommendedWorkZone extends OverlayZoneBase {
+  layer: 'recommended-works';
+}
+
+export type OverlayZone = SurveyFindingZone | RecommendedWorkZone;
 
 export interface CustomModelDef {
   id: string;

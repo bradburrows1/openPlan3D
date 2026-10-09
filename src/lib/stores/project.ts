@@ -628,6 +628,7 @@ export function removeElement(id: string) {
     if (f.annotations) f.annotations = f.annotations.filter(item => item.id !== id);
     if (f.entourage) f.entourage = f.entourage.filter((e) => e.id !== id);
     if (f.surveyFindings) f.surveyFindings = f.surveyFindings.filter((zone) => zone.id !== id);
+    if (f.recommendedWorks) f.recommendedWorks = f.recommendedWorks.filter((zone) => zone.id !== id);
     if (f.groups) f.groups = f.groups.map(group => ({ ...group, elementIds: group.elementIds.filter(itemId => !removedIds.has(itemId)) })).filter(group => group.elementIds.length >= 2);
   }, 'Deleted element');
 }

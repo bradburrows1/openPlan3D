@@ -2,6 +2,10 @@ import type { Project, DetailKind } from '$lib/models/types';
 import { validateItemDetails, validateRetainedDetailState } from './itemDetails';
 import { refreshLegacyFurnitureCategories } from './legacyFurnitureCategories';
 import { validateCustomModelDefinitions } from './customModelDefinitions';
+import { findPreset, isHexColour, UNKNOWN_ZONE_COLOR } from '$lib/northway/zonePresets';
+
+/** Zone codes are kept short in the editor (4); files may carry up to 8. */
+const MAX_STORED_CODE_LENGTH = 8;
 
 /** Read untrusted native files without mutating their input or the active editor. */
 export function readProject(value: unknown): Project {
@@ -155,14 +159,23 @@ export function readProject(value: unknown): Project {
       if (item.opacity !== undefined) number(item.opacity, `${path}.opacity`, 0, 1);
       booleans(item, ['locked'], path);
     });
-    // Northway survey findings: optional, so older and upstream files stay unchanged.
-    if (floor.surveyFindings !== undefined) elements('surveyFindings', (item, path) => {
-      defaults(item, { layer: 'survey-findings', shape: 'rect' });
-      choice(item.layer, ['survey-findings'], `${path}.layer`); choice(item.shape, ['rect'], `${path}.shape`);
-      text(item.code, `${path}.code`, true); strings(item, ['note'], path);
-      number(item.x, `${path}.x`); number(item.y, `${path}.y`);
-      positive(item.width, `${path}.width`); positive(item.height, `${path}.height`);
-    });
+    // Northway overlay layers: optional, so older and upstream files stay unchanged. Zones saved
+    // before names and colours were stored take them from their preset.
+    for (const [key, layer] of [['surveyFindings', 'survey-findings'], ['recommendedWorks', 'recommended-works']] as const) {
+      if (floor[key] !== undefined) elements(key, (item, path) => {
+        defaults(item, { layer, shape: 'rect' });
+        choice(item.layer, [layer], `${path}.layer`); choice(item.shape, ['rect'], `${path}.shape`);
+        text(item.code, `${path}.code`, true);
+        if (item.code.length > MAX_STORED_CODE_LENGTH) fail(`${path}.code`, `must be at most ${MAX_STORED_CODE_LENGTH} characters`);
+        if (item.preset !== undefined && item.preset !== null) text(item.preset, `${path}.preset`, true);
+        const preset = findPreset(layer, item.preset === undefined ? item.code : item.preset);
+        defaults(item, { preset: preset?.code ?? null, name: preset?.name ?? item.code, color: preset?.color ?? UNKNOWN_ZONE_COLOR });
+        strings(item, ['name', 'note'], path);
+        if (!isHexColour(item.color)) fail(`${path}.color`, 'must be a #rrggbb colour');
+        number(item.x, `${path}.x`); number(item.y, `${path}.y`);
+        positive(item.width, `${path}.width`); positive(item.height, `${path}.height`);
+      });
+    }
     if (floor.backgroundImage !== undefined) {
       const bg = record(floor.backgroundImage, `${path}.backgroundImage`), bgPath = `${path}.backgroundImage`;
       text(bg.dataUrl, `${bgPath}.dataUrl`, true); positioned(bg, bgPath); positive(bg.scale, `${bgPath}.scale`);

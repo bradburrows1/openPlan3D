@@ -81,6 +81,7 @@
     planStyle: 'technical',
     objectLibrary: 'survey',
     showSurveyFindings: true,
+    showRecommendedWorks: true,
   });
 
   onDestroy(projectSettings.subscribe((s) => { settings = { ...s }; }));
