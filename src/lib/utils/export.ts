@@ -23,6 +23,8 @@ import type { CanvasState } from '$lib/utils/canvasInteraction';
 import { projectSettings, formatArea, formatLength } from '$lib/stores/settings';
 import { get } from 'svelte/store';
 import jsPDF from 'jspdf';
+import { surveyPlanView } from '$lib/northway/planView';
+import { TECHNICAL_FIXTURE } from '$lib/northway/fixtures';
 import { exportRoomFill, isTechnicalStyle, TECHNICAL } from './planStyle';
 
 /** Escape text for safe SVG embedding */
@@ -177,6 +179,7 @@ function drawOpeningsOnCanvas(
  */
 export async function exportAsPNG(canvas: HTMLCanvasElement | null, project?: Project) {
   const name = project?.name || 'floorplan';
+  if (project) project = surveyPlanView(project);
 
   if (project) {
     const snapshot=structuredClone(project);
@@ -285,7 +288,7 @@ export async function exportAsPNG(canvas: HTMLCanvasElement | null, project?: Pr
 
       for (const item of floor.furniture) drawFurnitureItem({
         ctx, width: pad * 2, height: pad * 2, zoom: 1, camX: minX, camY: minY,
-      }, item, false);
+      }, item, false, undefined, isTechnicalStyle(get(projectSettings)));
 
       ctx.save();
       for (const stair of floor.stairs ?? []) drawStair({ ctx, width: pad * 2, height: pad * 2, zoom: 1, camX: minX, camY: minY }, stair, false);
@@ -316,6 +319,7 @@ export async function exportAsPNG(canvas: HTMLCanvasElement | null, project?: Pr
 export { downloadProjectJSON as exportAsJSON } from './projectBackup';
 
 export function exportAsSVG(project: Project, language: Locale = 'en') {
+  project = surveyPlanView(project);
   const floor = project.floors.find(f => f.id === project.activeFloorId) ?? project.floors[0];
   if (!floor) return;
   const entourage=(floor.entourage ?? []).flatMap(item=>{
@@ -555,7 +559,7 @@ export function exportAsSVG(project: Project, language: Locale = 'en') {
   for (const fi of floor.furniture) {
     const fx=fi.position.x-minX+pad, fy=fi.position.y-minY+pad;
     const cat=getCatalogItem(fi.catalogId), {width:fw,depth:fd}=getFurnitureSize(fi);
-    const color=fi.color ?? cat?.color ?? '#888888';
+    const color=technical ? TECHNICAL_FIXTURE.stroke : fi.color ?? cat?.color ?? '#888888';
     paths+=`  <g data-furniture="${escapeXml(fi.id)}" data-width="${fw}" data-depth="${fd}" transform="translate(${fx},${fy}) rotate(${fi.rotation || 0})">\n`;
     paths+=`<g transform="scale(${Math.sign(fi.scale?.x ?? 1)||1},${Math.sign(fi.scale?.y ?? 1)||1})">${furnitureSvg(fi.catalogId,fw,fd,color)}</g>\n`;
     const fontSize=Math.max(8,Math.min(12,Math.min(fw,fd)*0.2));
@@ -650,7 +654,7 @@ export function exportAs3DPNG(renderer: { domElement: HTMLCanvasElement }) {
 }
 
 export async function exportPDF(project: Project) {
-  const snapshot=structuredClone(project);
+  const snapshot=structuredClone(surveyPlanView(project));
   const floor=snapshot.floors.find(f=>f.id===snapshot.activeFloorId) ?? snapshot.floors[0];
   const definitions=[...new Set((floor?.entourage ?? []).flatMap(item=>{
     const def=getEntourageDef(item.defId)?undefined:snapshot.customEntourage?.find(d=>d.id===item.defId);
@@ -829,7 +833,7 @@ function renderPDF(project: Project, preparedImages: ReadonlyMap<string,HTMLImag
 
   for (const item of floor.furniture) drawFurnitureItem({
     ctx, width: pad * 2, height: pad * 2, zoom: 1, camX: minX, camY: minY,
-  }, item, false);
+  }, item, false, undefined, technical);
 
   ctx.save();
   for (const stair of floor.stairs ?? []) drawStair({ ctx, width: pad * 2, height: pad * 2, zoom: 1, camX: minX, camY: minY }, stair, false);

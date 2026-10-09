@@ -28,6 +28,8 @@
   import { openingDropTarget } from '$lib/utils/openingDrop';
   import { getWallTextureCanvas, getFloorTextureCanvas, setTextureLoadCallback } from '$lib/utils/textureGenerator';
   import { projectSettings, formatLength, formatArea } from '$lib/stores/settings';
+  import { planFurniture } from '$lib/northway/fixtures';
+  import { isTechnicalStyle } from '$lib/utils/planStyle';
   import type { ProjectSettings } from '$lib/stores/settings';
   import { resizeFurnitureFromHandle, type CanvasState } from '$lib/utils/canvasInteraction';
   import { drawWall as _drawWall, drawDoorOnWall as _drawDoorOnWall, drawWindowOnWall as _drawWindowOnWall, drawDoorDistanceDimensions as _drawDoorDistanceDimensions, drawWindowDistanceDimensions as _drawWindowDistanceDimensions, drawFurnitureItem, drawStair as _drawStair, drawColumn as _drawColumn, drawGuides as _drawGuides, drawPersistedMeasurements as _drawPersistedMeasurements, drawTextAnnotations as _drawTextAnnotations, drawAnnotation as _drawAnnotation, drawAnnotations as _drawAnnotations, drawRooms as _drawRooms, drawWallJoints as _drawWallJoints, drawSnapPoints as _drawSnapPoints, drawMinimap as _drawMinimap, drawEntourageItems as _drawEntourageItems, drawEntourageGhost as _drawEntourageGhost, drawFloorBelowGhost as _drawFloorBelowGhost, entourageAspect } from '$lib/utils/canvasRenderer';
@@ -198,6 +200,8 @@
   const MAGNETIC_SNAP = 15;
   // Store subscriptions
   let currentFloor: Floor | null = $state(null);
+  // Northway: movable furniture is hidden (and unselectable) in the survey object library.
+  let planFurnitureItems: FurnitureItem[] = $derived.by(() => currentFloor ? planFurniture(currentFloor.furniture, dimSettings) : []);
   let currentSelectedId: string | null = $state(null);
   let currentSelectedRoomId: string | null = $state(null);
   let currentPlacingId: string | null = $state(null);
@@ -316,7 +320,7 @@
   function selectAllPlanElements() {
     if (!currentFloor) return;
     const ids = new Set<string>();
-    for (const items of [currentFloor.walls, currentFloor.furniture, currentFloor.doors,
+    for (const items of [currentFloor.walls, planFurnitureItems, currentFloor.doors,
       currentFloor.windows, currentFloor.stairs, currentFloor.columns, currentFloor.entourage,
       layerVis.textAnnotations ? currentFloor.textAnnotations : [],
       layerVis.measurements ? currentFloor.measurements : [], layerVis.annotations ? currentFloor.annotations : []]) {
@@ -543,7 +547,7 @@
   }
 
   function drawFurniture(item: FurnitureItem, selected: boolean) {
-    drawFurnitureItem(getCS(), item, selected, customModelName(item, get(currentProject)) ?? (getCatalogItem(item.catalogId) ? furnitureName(item.catalogId, get(locale)) : undefined));
+    drawFurnitureItem(getCS(), item, selected, customModelName(item, get(currentProject)) ?? (getCatalogItem(item.catalogId) ? furnitureName(item.catalogId, get(locale)) : undefined), isTechnicalStyle(dimSettings));
   }
 
   // Track wall snap during placement preview
@@ -713,7 +717,7 @@
   function drawAlignmentGuides(item: FurnitureItem) {
     if (!currentFloor) return;
     const threshold = 5;
-    for (const other of currentFloor.furniture) {
+    for (const other of planFurnitureItems) {
       if (other.id === item.id) continue;
       const s1 = worldToScreen(item.position.x, item.position.y);
       const s2 = worldToScreen(other.position.x, other.position.y);
@@ -1225,7 +1229,7 @@
 
     // Furniture
     if (showFurniture) {
-      for (const fi of floor.furniture) {
+      for (const fi of planFurnitureItems) {
         const selected = isSelected(fi.id);
         if (selected && draggingFurnitureId === fi.id) drawAlignmentGuides(fi);
         drawFurniture(fi, selected);
@@ -1275,7 +1279,7 @@
           
           // --- Furniture-to-furniture distances ---
           // For each direction, find the nearest other furniture edge
-          const otherFurniture = floor.furniture.filter(f => f.id !== selFurniture.id);
+          const otherFurniture = planFurnitureItems.filter(f => f.id !== selFurniture.id);
           // Track closest furniture per direction
           const closestFurn: Record<string, { dist: number; dim: DimLine }> = {};
           
@@ -1952,7 +1956,7 @@
 
   function drawMinimap() {
     if (!showMinimap || !minimapCanvas || !currentFloor) return;
-    _drawMinimap(getCS(), minimapCanvas, currentFloor, getWorldBBox, layerVis);
+    _drawMinimap(getCS(), minimapCanvas, { ...currentFloor, furniture: planFurnitureItems }, getWorldBBox, layerVis);
   }
 
   function onMinimapClick(e: MouseEvent) {
@@ -2126,12 +2130,12 @@
 
   function findHandleAt(p: Point): HandleType | null {
     if (!currentFloor) return null;
-    return _findHandleAt(p, currentSelectedId, currentFloor.furniture, zoom);
+    return _findHandleAt(p, currentSelectedId, planFurnitureItems, zoom);
   }
 
   function findFurnitureAt(p: Point): FurnitureItem | null {
     if (!currentFloor) return null;
-    return _findFurnitureAt(p, currentFloor.furniture);
+    return _findFurnitureAt(p, planFurnitureItems);
   }
 
   function findColumnAt(p: Point): Column | null {
@@ -3087,7 +3091,7 @@
           }
         }
         // Furniture: center inside
-        for (const fi of currentFloor.furniture) {
+        for (const fi of planFurnitureItems) {
           if (ptInRect(fi.position)) ids.add(fi.id);
         }
         // Stairs: center inside
@@ -4091,8 +4095,8 @@
       {#if currentFloor.windows.length > 0}
         <span>{$t(currentFloor.windows.length === 1 ? 'canvasStatus.windowsOne' : 'canvasStatus.windowsMany', { count: currentFloor.windows.length })}</span>
       {/if}
-      {#if currentFloor.furniture.length > 0}
-        <span>{$t(currentFloor.furniture.length === 1 ? 'canvasStatus.objectsOne' : 'canvasStatus.objectsMany', { count: currentFloor.furniture.length })}</span>
+      {#if planFurnitureItems.length > 0}
+        <span>{$t(planFurnitureItems.length === 1 ? 'canvasStatus.objectsOne' : 'canvasStatus.objectsMany', { count: planFurnitureItems.length })}</span>
       {/if}
       <span class="text-gray-300">|</span>
     {/if}

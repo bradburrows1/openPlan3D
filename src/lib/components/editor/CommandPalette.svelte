@@ -6,6 +6,8 @@
   import { tick } from 'svelte';
   import { modalDialog } from '$lib/utils/modalDialog';
   import { furnitureCatalog } from '$lib/utils/furnitureCatalog';
+  import { FIXED_FIXTURE_IDS, isSurveyLibrary } from '$lib/northway/fixtures';
+  import { projectSettings } from '$lib/stores/settings';
   import { selectedTool, snapEnabled, placingFurnitureId, undo, redo, currentProject, viewMode } from '$lib/stores/project';
   import { exportAsJSON, exportAsSVG } from '$lib/utils/export';
   import { exportDXF } from '$lib/utils/cadExport';
@@ -58,7 +60,8 @@
     { id: 'a-toggle-3d', name: $t('commandPalette.toggle2d3d'), icon: '⚡', category: 'action', categoryLabel: `⚡ ${$t('commandPalette.action')}`, action: () => { viewMode.update(m => m === '2d' ? '3d' : '2d'); } },
   ]);
 
-  const furnitureItems: ResultItem[] = $derived(furnitureCatalog.map(f => ({
+  // Northway: the survey library only offers fixed fixtures here too.
+  const furnitureItems: ResultItem[] = $derived(furnitureCatalog.filter(f => !isSurveyLibrary($projectSettings) || FIXED_FIXTURE_IDS.has(f.id)).map(f => ({
     id: `f-${f.id}`,
     name: furnitureName(f.id, $locale),
     icon: f.icon,

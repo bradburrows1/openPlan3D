@@ -5,6 +5,8 @@
   import { onDestroy } from 'svelte';
   import { currentProject, activeFloor, selectedElementId, selectedElementIds, selectedRoomId, detectedRoomsStore, layerVisibility } from '$lib/stores/project';
   import { getCatalogItem } from '$lib/utils/furnitureCatalog';
+  import { projectSettings } from '$lib/stores/settings';
+  import { planFurniture } from '$lib/northway/fixtures';
   import { getEntourageDef } from '$lib/utils/entourageCatalog';
   import type { Floor } from '$lib/models/types';
 
@@ -69,7 +71,7 @@
 
     cats.push({
       key: 'furniture', label: $t('layers.furniture'), icon: '🪑',
-      items: floor.furniture.map((fi) => {
+      items: planFurniture(floor.furniture, $projectSettings).map((fi) => {
         const cat = getCatalogItem(fi.catalogId);
         return { id: fi.id, label: customModelName(fi, $currentProject) ?? furnitureName(fi.catalogId, $locale), icon: cat?.icon ?? '📦' };
       }),

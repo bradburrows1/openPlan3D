@@ -2,6 +2,9 @@ import type { Point } from '$lib/models/types';
 import type { RoomPreset } from './roomPresets';
 import { placePreset } from './roomPresets';
 import { addFurniture, rotateFurniture, beginUndoGroup, endUndoGroup } from '$lib/stores/project';
+import { get } from 'svelte/store';
+import { projectSettings } from '$lib/stores/settings';
+import { FIXED_FIXTURE_IDS, isSurveyLibrary } from '$lib/northway/fixtures';
 
 export interface FurniturePlacement {
   catalogId: string;
@@ -99,7 +102,10 @@ export function placeRoomTemplate(
   beginUndoGroup();
   try {
     placePreset(preset, origin, w, h);
+    // Northway: in the survey library a template only brings its fixed fixtures.
+    const survey = isSurveyLibrary(get(projectSettings));
     for (const item of template?.furniture ?? []) {
+      if (survey && !FIXED_FIXTURE_IDS.has(item.catalogId)) continue;
       const id = addFurniture(item.catalogId, {
         x: origin.x + item.x, y: origin.y + item.y,
       });

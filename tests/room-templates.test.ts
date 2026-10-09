@@ -1,9 +1,13 @@
-import { expect, it } from 'vitest';
+import { beforeEach, expect, it } from 'vitest';
 import { get } from 'svelte/store';
 import { createDefaultProject, currentProject, undo, redo } from '$lib/stores/project';
 import { roomPresets } from '$lib/utils/roomPresets';
 import { placeRoomTemplate, roomTemplates } from '$lib/utils/roomTemplates';
 import { getFurnitureSize } from '$lib/utils/furnitureCatalog';
+import { projectSettings } from '$lib/stores/settings';
+
+// Templates place their full furniture set in the full object library.
+beforeEach(() => projectSettings.update(settings => ({ ...settings, objectLibrary: 'full' })));
 
 it.each(roomTemplates)('$name furniture fits inside the walls without overlapping', template => {
   currentProject.set(createDefaultProject('Template layout'));

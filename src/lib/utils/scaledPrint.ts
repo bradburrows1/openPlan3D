@@ -6,12 +6,15 @@ import { projectSettings, formatArea } from '$lib/stores/settings';
 import { resolveRooms } from './roomDetection';
 import { drawRooms, drawDoorOnWall, drawWindowOnWall, drawFurnitureItem, drawStair, drawColumn, drawAnnotations, drawPersistedMeasurements, drawTextAnnotations, drawEntourageItems } from './canvasRenderer';
 import { worldToScreen, type CanvasState } from './canvasInteraction';
+import { surveyPlanView } from '$lib/northway/planView';
+import { isTechnicalStyle } from './planStyle';
 import { activePrintFloor, printBounds, calculatePrintLayout, type PrintOptions } from './printLayout';
 
 const PIXELS_PER_MM = 6;
 
 /** Preview and PDF use the same fixed physical page, independent of screen size/DPR. */
 export function renderPrintPage(canvas: HTMLCanvasElement, project: Project, options: PrintOptions, language: Locale = 'en') {
+  project = surveyPlanView(project);
   const floor = activePrintFloor(project);
   const bounds = floor && printBounds(floor, project.customEntourage);
   if (!bounds) return null;
@@ -59,7 +62,7 @@ export function renderPrintPage(canvas: HTMLCanvasElement, project: Project, opt
   }
   for (const door of floor.doors) { const wall = floor.walls.find(w => w.id === door.wallId); if (wall) drawDoorOnWall(cs, wall, door); }
   for (const win of floor.windows) { const wall = floor.walls.find(w => w.id === win.wallId); if (wall) drawWindowOnWall(cs, wall, win); }
-  for (const item of floor.furniture) drawFurnitureItem(cs, item, false);
+  for (const item of floor.furniture) drawFurnitureItem(cs, item, false, undefined, isTechnicalStyle(settings));
   for (const item of floor.stairs ?? []) drawStair(cs, item, false);
   for (const item of floor.columns ?? []) drawColumn(cs, item, false);
   drawAnnotations(cs, floor, null, settings);
@@ -79,6 +82,7 @@ export function renderPrintPage(canvas: HTMLCanvasElement, project: Project, opt
 }
 
 export function createPrintPDF(canvas: HTMLCanvasElement, project: Project, options: PrintOptions, language: Locale = 'en') {
+  project = surveyPlanView(project);
   const floor = activePrintFloor(project), bounds = floor && printBounds(floor, project.customEntourage);
   if (!bounds) throw new Error(translate(language, 'print.empty'));
   const layout = calculatePrintLayout(bounds, options);

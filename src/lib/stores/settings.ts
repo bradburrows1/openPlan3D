@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import type { PlanStyle } from '$lib/utils/planStyle';
+import type { ObjectLibrary } from '$lib/northway/fixtures';
 
 export interface ProjectSettings {
   units: 'metric' | 'imperial';         // m,cm vs ft,inch
@@ -14,6 +15,8 @@ export interface ProjectSettings {
   snapToWalls: boolean;                  // snap furniture to nearby walls when dragging
   gridSize: number;                      // grid snap size in cm (default 25)
   planStyle?: PlanStyle;                 // 2D appearance; missing means 'technical'
+  objectLibrary?: ObjectLibrary;         // 'survey' hides movable furniture; missing means 'survey'
+  showSurveyFindings?: boolean;          // Survey Findings layer; missing means shown
 }
 
 const defaultSettings: ProjectSettings = {
@@ -29,6 +32,8 @@ const defaultSettings: ProjectSettings = {
   snapToWalls: true,
   gridSize: 25,
   planStyle: 'technical',
+  objectLibrary: 'survey',
+  showSurveyFindings: true,
 };
 
 // Load from localStorage if available

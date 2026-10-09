@@ -15,6 +15,7 @@
   import { getWallStartHeight, getWallEndHeight } from '$lib/models/types';
   import { wallColors, type WallColor } from '$lib/utils/materials';
   import { projectSettings, formatArea } from '$lib/stores/settings';
+  import { planFurniture } from '$lib/northway/fixtures';
   import * as THREE from 'three';
   import { createRoomSlabGeometry } from '$lib/utils/roomSlabGeometry';
   import { roomHoles } from '$lib/utils/roomNesting';
@@ -1498,8 +1499,8 @@
       addOpeningFrame(wall, t, win.width + 16, win.sillHeight - 4, 4, wt + 10, frameMat);
     }
 
-    // Furniture
-    for (const fi of floor.furniture) {
+    // Furniture (Northway: movable furniture is hidden in the survey object library)
+    for (const fi of planFurniture(floor.furniture, get(projectSettings))) {
       const model = createPlacedFurnitureModel(fi, markSceneDirty, get(currentProject) ?? undefined);
       if (model) wallGroup.add(model);
     }
@@ -1793,7 +1794,7 @@
   function rebuildScene(force = false) {
     const project = get(currentProject);
     if (!project || !currentFloor) return;
-    const signature = sceneSignature(project, currentFloor, showAllFloors, get(projectSettings).units);
+    const signature = sceneSignature(project, currentFloor, showAllFloors, get(projectSettings).units, get(projectSettings).objectLibrary);
     if (!force && signature === renderedSignature) return;
     const walkingPosition = walkthroughMode ? camera.position.clone() : null;
     const walkingRotation = walkthroughMode ? camera.quaternion.clone() : null;

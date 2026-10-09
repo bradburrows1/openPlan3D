@@ -1,6 +1,6 @@
 <script lang="ts">
   import { furnitureName } from '$lib/i18n/furnitureNames';
-  import { t, locale } from '$lib/i18n';
+  import { t, locale, type TranslationKey } from '$lib/i18n';
   import { entourageLabels } from '$lib/i18n/entourageLabels';
   import { catalogCategoryLabels, normalizeCatalogSearch } from '$lib/i18n/catalogCategories';
   import { roomPresetLabels, roomTemplateLabels } from '$lib/i18n/roomLabels';
@@ -15,6 +15,8 @@
   import { roomPresets, placePreset } from '$lib/utils/roomPresets';
   import { roomTemplates, placeRoomTemplate } from '$lib/utils/roomTemplates';
   import { furnitureCatalog, furnitureCategories } from '$lib/utils/furnitureCatalog';
+  import { FIXTURE_LIBRARY_IDS, FIXED_FIXTURE_IDS, isSurveyLibrary } from '$lib/northway/fixtures';
+  import { projectSettings } from '$lib/stores/settings';
   import type { FurnitureDef } from '$lib/utils/furnitureCatalog';
   import FurnitureThumbnail from './FurnitureThumbnail.svelte';
   import CustomModelPanel from './CustomModelPanel.svelte';
@@ -84,7 +86,8 @@
   }
 
   let recentItems = $derived(
-    recentIds.map(id => furnitureCatalog.find(f => f.id === id)).filter(Boolean) as FurnitureDef[]
+    (recentIds.map(id => furnitureCatalog.find(f => f.id === id)).filter(Boolean) as FurnitureDef[])
+      .filter(item => !surveyLibrary || FIXED_FIXTURE_IDS.has(item.id))
   );
 
   // --- Favorites (localStorage) ---
@@ -105,6 +108,10 @@
   let favoriteItems = $derived(
     favoriteIds.map(id => furnitureCatalog.find(f => f.id === id)).filter(Boolean) as FurnitureDef[]
   );
+
+  // Northway: the survey library offers only a short Fixed Fixtures group.
+  let surveyLibrary = $derived(isSurveyLibrary($projectSettings));
+  const fixtureItems = FIXTURE_LIBRARY_IDS.map(id => furnitureCatalog.find(f => f.id === id)).filter(Boolean) as FurnitureDef[];
 
   let filtered = $derived(
     (() => {
@@ -591,6 +598,36 @@
             </button>
           {/each}
         </div>
+      </div>
+
+    {:else if activeTab === 'objects' && surveyLibrary}
+      <div class="space-y-2" data-fixed-fixtures>
+        <h3 class="text-xs font-semibold text-gray-400 uppercase mb-1">{$t('northway.fixedFixtures')}</h3>
+        <p class="text-xs text-gray-400 mb-2">{$t('northway.fixedFixturesHelp')}</p>
+        <div class="grid grid-cols-2 gap-2">
+          {#each fixtureItems as item}
+            <button
+              class="w-full flex flex-col items-center gap-1 p-3 rounded-lg border-2 transition-colors cursor-grab active:cursor-grabbing {currentPlacing === item.id ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-300' : 'border-gray-100 hover:border-blue-300 hover:bg-blue-50'}"
+              onclick={() => onFurnitureClick(item)}
+              draggable="true"
+              ondragstart={(e) => { e.dataTransfer?.setData('application/o3d-type', 'furniture'); e.dataTransfer?.setData('application/o3d-id', item.id); }}
+            >
+              <div class="w-12 h-12"><FurnitureThumbnail catalogId={item.id} name={furnitureName(item.id, $locale)} color="#a1a1aa" /></div>
+              <span class="text-xs font-medium text-gray-600">{$t(`northway.fixture.${item.id}` as TranslationKey)}</span>
+              <span class="text-[10px] text-gray-400">{item.width}×{item.depth}cm</span>
+            </button>
+          {/each}
+          <button
+            class="w-full flex flex-col items-center gap-1 p-3 rounded-lg border-2 transition-colors {isPlacingStair ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-300' : 'border-gray-100 hover:border-blue-300 hover:bg-blue-50'}"
+            onclick={onPlaceStair}
+          >
+            <div class="w-12 h-12 flex items-center justify-center text-gray-500">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 5h-5V2h-3v6h-4V5H7v6H2v3h5v3h3v-3h4v3h3v-6h5z"/></svg>
+            </div>
+            <span class="text-xs font-medium text-gray-600">{$t('buildTools.stairs')}</span>
+          </button>
+        </div>
+        <p class="text-[10px] text-gray-400 pt-2">{$t('northway.fullLibraryHint')}</p>
       </div>
 
     {:else if activeTab === 'objects'}

@@ -19,6 +19,7 @@ import { resolveRooms, getRoomPolygon, roomLabelPosition } from '$lib/utils/room
 import { roomHoles } from './roomNesting';
 import { projectSettings, formatArea, formatLength } from '$lib/stores/settings';
 import { get } from 'svelte/store';
+import { surveyPlanView } from '$lib/northway/planView';
 
 function download(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -40,6 +41,7 @@ const LAYER_COLORS = {
 };
 
 export function exportDXF(project: Project, language: Locale = 'en') {
+  project = surveyPlanView(project);
   const floor = project.floors.find(f => f.id === project.activeFloorId) ?? project.floors[0];
   if (!floor || !hasPlanExportContent(floor) && !(floor.entourage ?? []).some(e=>getEntourageDef(e.defId) && e.opacity!==0)) return;
 

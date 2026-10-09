@@ -3,6 +3,7 @@ import { exportAsSVG, exportAsPNG, exportPDF } from '$lib/utils/export';
 import { exportDXF } from '$lib/utils/cadExport';
 import { resolveRooms } from '$lib/utils/roomDetection';
 import { benchmarkProject } from './fixtures/render-benchmark';
+import { projectSettings } from '$lib/stores/settings';
 import { rectangleWalls, roomProject } from './fixtures/project';
 
 const { pdfText, pdfSave } = vi.hoisted(() => ({ pdfText: vi.fn(), pdfSave: vi.fn() }));
@@ -22,6 +23,8 @@ const canvasRect = vi.fn();
 let canvas: HTMLCanvasElement;
 
 beforeEach(() => {
+  // These cover upstream furniture exports; survey filtering has its own tests.
+  projectSettings.update(settings => ({ ...settings, objectLibrary: 'full' }));
   downloaded = [];
   canvasText.mockClear(); canvasCurve.mockClear(); canvasRect.mockClear(); pdfText.mockClear(); pdfSave.mockClear();
   const ctx = new Proxy({ fillText: canvasText, fillRect: canvasRect, quadraticCurveTo: canvasCurve, measureText: () => ({ width: 30 }) }, {

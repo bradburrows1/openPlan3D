@@ -18,8 +18,8 @@ function renderedFloor(floor: Floor) {
 /** A value snapshot also detects in-place edits and history's cloned objects.
  * Keep all other floor/item fields conservatively: geometry, finish overrides,
  * room labels, elevations and future render fields must still invalidate. */
-export function sceneSignature(project: Project, floor: Floor, stacked: boolean, units: ProjectSettings['units']): string {
-  return JSON.stringify({ projectId: project.id, activeFloorId: floor.id, stacked, units,
+export function sceneSignature(project: Project, floor: Floor, stacked: boolean, units: ProjectSettings['units'], objectLibrary?: ProjectSettings['objectLibrary']): string {
+  return JSON.stringify({ projectId: project.id, activeFloorId: floor.id, stacked, units, objectLibrary,
     customModels: project.customModels,
     floors: (stacked ? project.floors : [floor]).map(renderedFloor) });
 }

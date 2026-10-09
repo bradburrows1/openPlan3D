@@ -18,6 +18,7 @@ import { getRoomPolygon, roomCentroid, roomLabelPosition } from '$lib/utils/room
 import { getWallTextureCanvas, getFloorTextureCanvas } from '$lib/utils/textureGenerator';
 import { getEntourageDef } from '$lib/utils/entourageCatalog';
 import { isTechnicalStyle, TECHNICAL } from '$lib/utils/planStyle';
+import { TECHNICAL_FIXTURE } from '$lib/northway/fixtures';
 import type { EntourageItem, CustomEntourageDef } from '$lib/models/types';
 
 // ── Wall geometry helpers ────────────────────────────────────────────
@@ -908,7 +909,7 @@ export function drawWindowDistanceDimensions(cs: CanvasState, wall: Wall, window
 
 // ── Furniture drawing ────────────────────────────────────────────────
 
-export function drawFurnitureItem(cs: CanvasState, item: FurnitureItem, selected: boolean, caption?: string): void {
+export function drawFurnitureItem(cs: CanvasState, item: FurnitureItem, selected: boolean, caption?: string, technical = false): void {
   const { ctx, zoom } = cs;
   const cat = getCatalogItem(item.catalogId);
   const s = wts(cs, item.position.x, item.position.y);
@@ -924,8 +925,9 @@ export function drawFurnitureItem(cs: CanvasState, item: FurnitureItem, selected
   ctx.rotate(angle);
   ctx.scale(Math.sign(sx) || 1, Math.sign(sy) || 1);
 
-  const itemColor = item.color ?? cat?.color ?? '#888888';
-  const strokeColor = selected ? '#3b82f6' : itemColor;
+  // Technical style: fixtures are neutral outlines, not realistic finishes.
+  const itemColor = technical ? TECHNICAL_FIXTURE.fill : item.color ?? cat?.color ?? '#888888';
+  const strokeColor = selected ? '#3b82f6' : technical ? TECHNICAL_FIXTURE.stroke : itemColor;
   ctx.lineWidth = selected ? 2 : 1;
   drawFurnitureIcon(ctx, item.catalogId, w, d, itemColor, strokeColor);
 
