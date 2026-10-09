@@ -17,14 +17,13 @@
   import { furnitureCatalog, furnitureCategories } from '$lib/utils/furnitureCatalog';
   import { FIXTURE_LIBRARY_IDS, FIXED_FIXTURE_IDS, isSurveyLibrary } from '$lib/northway/fixtures';
   import { projectSettings } from '$lib/stores/settings';
-  import { SURVEY_FINDING_PRESETS, rgba, FILL_OPACITY, BORDER_OPACITY } from '$lib/northway/surveyPresets';
-  import { placingSurveyFinding } from '$lib/northway/surveyStore';
-  import type { SurveyFindingCode } from '$lib/models/types';
+  import { placingZone } from '$lib/northway/overlayStore';
+  import OverlayLayerGroup from '$lib/northway/components/OverlayLayerGroup.svelte';
   import type { FurnitureDef } from '$lib/utils/furnitureCatalog';
   import FurnitureThumbnail from './FurnitureThumbnail.svelte';
   import CustomModelPanel from './CustomModelPanel.svelte';
   import { createProjectFromRoomPlan, extractRoomJsonFromZip, roomPlanImportOptions, validateRoomPlan, ORTHO_VERSION } from '$lib/utils/roomplanImport';
-  import { currentProject, selectedElementId, selectedElementIds } from '$lib/stores/project';
+  import { currentProject } from '$lib/stores/project';
 
   const openingLifetime = new AbortController();
   onDestroy(() => openingLifetime.abort());
@@ -47,33 +46,7 @@
     if (tool === 'measure' || tool === 'annotate') activateMeasurementTool(tool);
     else selectedTool.set(tool);
     placingFurnitureId.set(null);
-    placingSurveyFinding.set(null);
-  }
-
-  // Northway: Survey Findings. Pick a preset, then drag a rectangle on the plan.
-  let issuePickerOpen = $state(false);
-  let armedIssue = $state<string | null>(null);
-  onDestroy(placingSurveyFinding.subscribe((code) => { armedIssue = code; }));
-  let findingsVisible = $derived($projectSettings.showSurveyFindings !== false);
-
-  function armIssue(code: SurveyFindingCode) {
-    if (armedIssue === code) { placingSurveyFinding.set(null); return; }
-    selectedTool.set('select');
-    placingFurnitureId.set(null);
-    if (!findingsVisible) projectSettings.update(settings => ({ ...settings, showSurveyFindings: true }));
-    placingSurveyFinding.set(code);
-  }
-
-  function toggleFindings() {
-    const project = $currentProject;
-    const zoneIds = new Set(project?.floors.flatMap(floor => floor.surveyFindings ?? []).map(zone => zone.id));
-    if (findingsVisible) {
-      // Hidden areas must not stay selected, or Delete would remove something unseen.
-      placingSurveyFinding.set(null);
-      if (zoneIds.has($selectedElementId ?? '')) selectedElementId.set(null);
-      selectedElementIds.update(ids => new Set([...ids].filter(id => !zoneIds.has(id))));
-    }
-    projectSettings.update(settings => ({ ...settings, showSurveyFindings: !findingsVisible }));
+    placingZone.set(null);
   }
 
   let currentTool = $state<Tool>('select');
@@ -433,47 +406,9 @@
           </div>
         </button>
 
-        <h3 class="text-xs font-semibold text-gray-400 uppercase mb-2 mt-3">{$t('northway.surveyFindings')}</h3>
-        <div class="space-y-1" data-survey-findings role="group" aria-label={$t('northway.surveyFindings')}>
-          <button
-            class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors {issuePickerOpen || armedIssue ? 'bg-blue-50 text-slate-800 ring-1 ring-blue-200' : 'hover:bg-gray-50 text-gray-700'}"
-            aria-expanded={issuePickerOpen}
-            onclick={() => { issuePickerOpen = !issuePickerOpen; if (!issuePickerOpen) placingSurveyFinding.set(null); }}
-          >
-            <div class="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="16" height="12" rx="1" stroke-dasharray="3 2"/><line x1="12" y1="9" x2="12" y2="15"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
-            </div>
-            <div class="text-left">
-              <div class="font-medium">{$t('northway.addIssueArea')}</div>
-              <div class="text-xs text-gray-400">{$t('northway.addIssueAreaHelp')}</div>
-            </div>
-          </button>
-          {#if issuePickerOpen}
-            <div class="grid grid-cols-1 gap-1 pl-2" data-issue-presets>
-              {#each SURVEY_FINDING_PRESETS as preset}
-                <button
-                  class="flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs transition-colors {armedIssue === preset.code ? 'bg-blue-50 ring-1 ring-blue-300 text-slate-800' : 'hover:bg-gray-50 text-gray-700'}"
-                  aria-pressed={armedIssue === preset.code}
-                  title={$t(`northway.preset.${preset.code}` as TranslationKey)}
-                  onclick={() => armIssue(preset.code)}
-                >
-                  <span class="w-6 h-4 rounded-sm shrink-0 border-[1.5px]" style="background: {rgba(preset.color, FILL_OPACITY)}; border-color: {rgba(preset.color, BORDER_OPACITY)}"></span>
-                  <span class="font-semibold w-6" style="color: {preset.color}">{preset.code}</span>
-                  <span class="truncate">{$t(`northway.preset.${preset.code}` as TranslationKey)}</span>
-                </button>
-              {/each}
-            </div>
-          {/if}
-          <button
-            class="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-gray-600 hover:bg-gray-50"
-            aria-pressed={!findingsVisible}
-            data-survey-findings-toggle
-            onclick={toggleFindings}
-          >
-            <span aria-hidden="true">{findingsVisible ? '◉' : '○'}</span>
-            {findingsVisible ? $t('northway.hideSurveyFindings') : $t('northway.showSurveyFindings')}
-          </button>
-        </div>
+        <!-- Northway: the two survey overlay layers, each independently editable and showable. -->
+        <OverlayLayerGroup layer="survey-findings" />
+        <OverlayLayerGroup layer="recommended-works" />
 
         <h3 class="text-xs font-semibold text-gray-400 uppercase mb-2 mt-3">{$t('buildTools.structure')}</h3>
         <button
