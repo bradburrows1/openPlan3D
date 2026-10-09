@@ -221,6 +221,12 @@ new plans look neutral because the rendering ignores finishes, not because the d
 | Style and branding | `src/lib/utils/planStyle.ts`, `src/app.css`, `src/app.html`, `static/favicon.svg`, `i18n/locales/en.ts` |
 | iPhone package round trip | `src/lib/utils/projectPackageBridge.ts` (web-only fields must survive `webToNative` and `nativeToWeb`) |
 
+### Stage 2 additions
+
+Stage 2 added the survey object library (fixed fixtures only by default) and the Survey Findings
+issue areas. Both live in `src/lib/northway/`, with small `// Northway:` hooks in upstream files. See
+"Stage 2: what was built" in [`NORTHWAY_CUSTOMISATION_PLAN.md`](NORTHWAY_CUSTOMISATION_PLAN.md).
+
 ## 11. Risks and limitations found
 
 * **Upstream analytics**: `src/routes/+layout.svelte` loaded Firebase Analytics for the upstream

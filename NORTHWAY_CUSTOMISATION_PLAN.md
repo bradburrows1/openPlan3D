@@ -1,6 +1,7 @@
 # Northway customisation plan: survey overlays and branded exports
 
-Status: **plan only**. Nothing in this note is implemented yet. It builds on the code map in
+Status: **Stage 2 implemented the Survey Findings layer** (see "Stage 2: what was built" at the end).
+Recommended Works, legends and branded exports are still plans. This note builds on the code map in
 [`NORTHWAY_ARCHITECTURE.md`](NORTHWAY_ARCHITECTURE.md).
 
 Goal for later stages:
@@ -143,3 +144,44 @@ export interface SurveyZone {
 | Persisted UI preference | `projectSettings` (`stores/settings.ts`), as `planStyle` does |
 | Export bounds and content checks | `extendBoundsFor*` (`export.ts`), `planContentBounds.ts`, `planExportContent.ts` |
 | i18n strings | `src/lib/i18n/locales/en.ts` (keep `pt.ts` keys in parity; a test enforces this) |
+
+## Stage 2: what was built
+
+Stage 2 followed this plan with a few deliberate simplifications:
+
+* **Survey object library** (`src/lib/northway/fixtures.ts`). `ProjectSettings.objectLibrary` defaults
+  to `'survey'`. Only fixed fixtures are drawn, hit-tested, listed and exported:
+  * kitchen units, sinks, hobs and fitted appliances;
+  * sanitaryware;
+  * fireplaces, stairs and garage doors;
+  * plumbing and electrical symbols.
+
+  RoomPlan `storage` counts as a fitted unit only when it is no taller than 110 cm and within 30 cm
+  of a sink, worktop or fitted appliance, or of another fitted unit. Movable furniture stays in the
+  project data. Settings → Dimensions → Full object library brings the upstream library and furniture
+  back. Exporters see the survey view through `src/lib/northway/planView.ts → surveyPlanView()`.
+* **Model.** `Floor.surveyFindings?: SurveyFindingZone[]` with `{ id, layer: 'survey-findings', code,
+  shape: 'rect', x, y, width, height, note? }`. `x`/`y` is the top-left corner in world cm. The
+  rectangle is axis-aligned; rotation and polygons are not implemented yet. Unknown codes are kept and
+  drawn in grey.
+* **Presets** (`surveyPresets.ts`): HM, WM, DR, WR, MG, CD, PD, RD, TD and SV. Fill 25%, border
+  80%, 1.75 px.
+* **Store** (`surveyStore.ts`) uses `mutateActiveFloor()`. That and `newElementId()` are the only new
+  exports in `stores/project.ts`. `removeElement()` also deletes zones, so the Delete key works.
+* **Rendering** (`surveyRenderer.ts`) is shared by the canvas, PNG, PDF and scaled print. SVG has a
+  matching string emitter in `export.ts`. Order: areas after room fills, codes after walls and
+  openings, selection and handles last.
+* **Interaction** (`FloorPlanCanvas.svelte`, marked `// Northway:`):
+  * Areas are hit-tested after walls, openings and fixtures but before rooms and room labels.
+  * Moves and resizes follow screen deltas, so the properties panel opening mid-gesture cannot shift
+    an area.
+  * Areas are not part of wall snapping, select-all or marquee selection.
+* **UI**: Build tab → Survey Findings (Add Issue Area, presets, Show/Hide); the Issue area properties
+  panel (type, width, depth, duplicate, delete); the Objects tab's Fixed Fixtures group.
+* **Layer visibility** is `ProjectSettings.showSurveyFindings` (per browser). Exports follow it.
+
+Not done in Stage 2, and next in line:
+
+* Recommended Works as a second layer: add `layer: 'recommended-works'` and its own presets, and
+  reuse every module above.
+* Legend and branded exports, polygon zones, rotation, per-zone notes in the UI, and DXF output.
