@@ -1,7 +1,9 @@
 # Deploying Northway Floor Plans to Vercel
 
-The app is a SvelteKit site, and almost all of it runs in the browser. Plans are saved in the browser's
-IndexedDB. There is no database, login or Supabase. On Vercel it deploys as static assets plus a few
+The app is a SvelteKit site, and almost all of it runs in the browser. Since Stage 3, staff sign in
+with Supabase Auth and plans are saved to a Supabase database protected by Row Level Security; see
+[`SUPABASE_SETUP.md`](SUPABASE_SETUP.md). The browser talks to Supabase directly with the public
+(publishable) key; no server secrets are involved. On Vercel it deploys as static assets plus a few
 small serverless functions for server-side rendering and the dormant upstream `/api/*` and `/mcp`
 routes, which return HTTP 503 unless enabled.
 
@@ -37,11 +39,13 @@ VERCEL=1 NODE_ENV=production npm run build   # produces .vercel/output
    * **Build, install and output settings**: leave them at their defaults, because `vercel.json`
      overrides them.
    * **Node.js version** (Settings → Build and Deployment): 22.x or 24.x. `.nvmrc` says 24.
-   * **Environment variables**: none are required. Leave `PUBLIC_ENABLE_ANALYTICS`,
-     `HANDOFF_UPLOADS_ENABLED` and `ASSISTANT_SHARES_ENABLED` **unset**. That keeps upstream analytics
-     and cloud sharing off.
-4. Click **Deploy**. The first deployment gets a `*.vercel.app` URL. Open it, start a new plan, draw a
-   few walls and try an export.
+   * **Environment variables** (Stage 3): add `PUBLIC_SUPABASE_URL` and
+     `PUBLIC_SUPABASE_PUBLISHABLE_KEY` exactly as described in
+     [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md) section 6. Both are public by design. **Never** add a
+     Supabase secret or service_role key. Leave `PUBLIC_ENABLE_ANALYTICS`, `HANDOFF_UPLOADS_ENABLED`
+     and `ASSISTANT_SHARES_ENABLED` **unset**. That keeps upstream analytics and cloud sharing off.
+4. Click **Deploy**. The first deployment gets a `*.vercel.app` URL. Open it, sign in as a staff
+   account, create a plan, draw a few walls, save it, and try an export.
 5. **Production branch**: Settings → Git → Production Branch. Until Stage 1 is merged, either set it to
    `northway-stage-1` or treat that branch's deployments as previews (every push gets a preview URL)
    and merge to `main` when you are happy.
@@ -71,7 +75,9 @@ Nothing is configured yet. When you are ready:
 4. Wait for the domain to show **Valid Configuration**. This usually takes minutes, and up to the DNS
    TTL. Vercel then issues the HTTPS certificate automatically.
 5. Optional: set it as the primary domain and redirect the `*.vercel.app` URL to it.
+6. In Supabase, **Authentication → URL Configuration**: set **Site URL** to
+   `https://plans.northwaypreservation.co.uk` and keep it in **Redirect URLs**.
 
-Note: projects are stored per browser origin. Plans saved while using the `*.vercel.app` URL will
-**not** appear automatically at `plans.northwaypreservation.co.uk`. Before switching, export any plans
-you need ("Download JSON" or the library backup) and import them on the new domain.
+Plans saved to Northway Plans live in Supabase, so they appear on the new domain straight away after
+signing in again. Only per-browser items stay on the old address: the sign-in session, unsaved-change
+recovery copies, view settings and any projects in the legacy local library (`/local`).

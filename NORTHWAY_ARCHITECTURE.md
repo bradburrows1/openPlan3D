@@ -221,6 +221,12 @@ new plans look neutral because the rendering ignores finishes, not because the d
 | Style and branding | `src/lib/utils/planStyle.ts`, `src/app.css`, `src/app.html`, `static/favicon.svg`, `i18n/locales/en.ts` |
 | iPhone package round trip | `src/lib/utils/projectPackageBridge.ts` (web-only fields must survive `webToNative` and `nativeToWeb`) |
 
+### Stage 3 additions
+
+Stage 3 added private staff sign-in and the Supabase-backed plan library, with save and reopen. See
+[`SUPABASE_SETUP.md`](SUPABASE_SETUP.md) and "Stage 3: what was built" in
+[`NORTHWAY_CUSTOMISATION_PLAN.md`](NORTHWAY_CUSTOMISATION_PLAN.md).
+
 ### Stage 2 additions
 
 Stage 2 added the survey object library (fixed fixtures only by default) and the Survey Findings
@@ -238,8 +244,8 @@ issue areas. Both live in `src/lib/northway/`, with small `// Northway:` hooks i
   RoomPlan** or **Import JSON** instead.
 * "Share with assistant" and the `/mcp` route point to `app.openplan3d.com` and are disabled (503) on
   our deployment. Hide them in the branding stage.
-* Data is per browser and per device (IndexedDB). Clearing site data or switching device loses
-  unexported projects, so surveyors should keep JSON exports with the job until a storage stage exists.
+* Plans in the Northway library are stored in Supabase (Stage 3). Only the legacy local editor at
+  `/editor` and `/local` still keeps projects per browser in IndexedDB.
 * Room fills and labels in the PNG, SVG and PDF exports are separate code paths from the on-screen
   canvas. Any visual change, and the future overlays, must be made in each exporter, or the exporters
   should be refactored to share one renderer.

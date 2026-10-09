@@ -185,3 +185,33 @@ Not done in Stage 2, and next in line:
 * Recommended Works as a second layer: add `layer: 'recommended-works'` and its own presets, and
   reuse every module above.
 * Legend and branded exports, polygon zones, rotation, per-zone notes in the UI, and DXF output.
+
+## Stage 3: what was built
+
+* **Sign-in.**
+  * Supabase Auth, email and password only, with public sign-up disabled.
+  * `src/lib/northway/cloud/auth.ts` holds the sign-in state; `AuthGate.svelte` guards the
+    `src/routes/(staff)/` route group (`/`, `/projects/[id]`, `/editor`, `/local`).
+  * `/login` is the only public page. Staff means signed in **and** listed in `northway_plan_staff`.
+* **Storage.**
+  * `floor_plan_projects`, one row per plan (migration in `supabase/migrations/`).
+  * `project_data` holds the complete editable project document, the same JSON as Download JSON,
+    validated with `readProject()`. It is versioned by `schema_version`, and `revision` guards
+    against concurrent saves.
+  * Access is through `src/lib/northway/cloud/projectsApi.ts`; the document format is in
+    `projectDocument.ts`.
+* **Library** (`src/routes/(staff)/+page.svelte`).
+  * New Plan (Blank or Import), search, rename, duplicate and delete with confirmation.
+  * Imports go through `importPlan.ts`: RoomPlan JSON or zip, OpenPlan3D JSON, project packages.
+* **Editor.**
+  * `/projects/[id]` hosts the shared `EditorWorkspace.svelte`, with `TopBar` in `cloud` mode: Back to
+    Plans, project name, Saved / Unsaved changes, and Save (also Ctrl+S).
+  * `session.ts` decides "unsaved" by comparing the plan with the last saved document, saves with
+    the revision check, and offers Replace / Save as new plan on a conflict.
+  * Unsaved edits are mirrored to a per-browser recovery copy (`recovery.ts`), which is offered back
+    after a crash or failed save.
+  * Local autosave and version history are off for cloud plans.
+* **Upstream local mode** is kept, behind sign-in, at `/editor` and `/local`. It is unlinked from
+  the Northway UI, and the upstream browser suite keeps running against it.
+* **Testing.** `tooling/northway-supabase/` runs a real Supabase Auth + PostgREST + PostgreSQL stack
+  locally for the RLS integration tests and the browser suite.
