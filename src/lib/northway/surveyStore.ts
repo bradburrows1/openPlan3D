@@ -1,6 +1,9 @@
-import { get } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import type { SurveyFindingZone } from '$lib/models/types';
 import { currentProject, mutateActiveFloor, newElementId } from '$lib/stores/project';
+
+/** Preset armed by Add Issue Area; the next drag on the plan creates a zone with it. */
+export const placingSurveyFinding = writable<SurveyFindingZone['code'] | null>(null);
 
 export type ZoneRect = Pick<SurveyFindingZone, 'x' | 'y' | 'width' | 'height'>;
 
