@@ -29,8 +29,8 @@
   import { getWallTextureCanvas, getFloorTextureCanvas, setTextureLoadCallback } from '$lib/utils/textureGenerator';
   import { projectSettings, formatLength, formatArea } from '$lib/stores/settings';
   import { planFurniture } from '$lib/northway/fixtures';
-  import { addSurveyFinding, setSurveyFindingRect, placingSurveyFinding, normalizeRect, MIN_ZONE_SIZE, type ZoneRect } from '$lib/northway/surveyStore';
-  import { drawSurveyFindingAreas, drawSurveyFindingCodes, drawSurveyFindingSelection, drawSurveyFindingDraft, findSurveyFindingAt, findSurveyFindingHandleAt, resizeZoneRect, zoneHandlePoint, zoneCursor, type ZoneHandle } from '$lib/northway/surveyRenderer';
+  import { addZone, setZoneRect, placingZone, normalizeRect, MIN_ZONE_SIZE, type ZoneRect, type ZoneTemplate } from '$lib/northway/overlayStore';
+  import { drawZoneAreas, drawZoneCodes, drawZoneSelection, drawZoneDraft, zonesAt, pickZoneAt, findZoneHandleAt, resizeZoneRect, zoneHandlePoint, zoneCursor, type ZoneHandle } from '$lib/northway/overlayRenderer';
   import { isTechnicalStyle } from '$lib/utils/planStyle';
   import type { ProjectSettings } from '$lib/stores/settings';
   import { resizeFurnitureFromHandle, type CanvasState } from '$lib/utils/canvasInteraction';
@@ -216,16 +216,22 @@
   let currentGridSize: number = $state(25);
   let isPlacingStair: boolean = $state(false);
   // Northway: Survey Findings issue areas (src/lib/northway).
-  let placingZoneCode: string | null = $state(null);
-  onDestroy(placingSurveyFinding.subscribe((code) => { placingZoneCode = code; markDirty(); }));
+  let placingZoneTemplate: ZoneTemplate | null = $state(null);
+  onDestroy(placingZone.subscribe((template) => { placingZoneTemplate = template; markDirty(); }));
   let drawingZone: { start: Point; end: Point } | null = $state(null);
   // Moves and resizes follow screen deltas from the press, like room labels, so the
   // properties panel opening on selection cannot shift the area under the pointer.
   let draggingZone: { id: string; start: ZoneRect; press: Point } | null = $state(null);
   let resizingZone: { id: string; handle: ZoneHandle; start: ZoneRect; press: Point } | null = $state(null);
-  let surveyZones = $derived.by(() => dimSettings.showSurveyFindings === false ? [] : currentFloor?.surveyFindings ?? []);
-  let selectedZone = $derived.by(() => surveyZones.find(zone => zone.id === currentSelectedId) ?? null);
-  $effect(() => { if (currentTool !== 'select') placingSurveyFinding.set(null); });
+  /** Visible zones of both overlay layers; each layer can be hidden on its own. */
+  let overlayZones = $derived.by(() => [
+    ...(dimSettings.showSurveyFindings === false ? [] : currentFloor?.surveyFindings ?? []),
+    ...(dimSettings.showRecommendedWorks === false ? [] : currentFloor?.recommendedWorks ?? []),
+  ]);
+  let selectedZone = $derived.by(() => overlayZones.find(zone => zone.id === currentSelectedId) ?? null);
+  /** A press on the already-selected zone where others overlap: a click without dragging selects the next one. */
+  let zoneCyclePoint: Point | null = null;
+  $effect(() => { if (currentTool !== 'select') placingZone.set(null); });
   function zoneResizeCursor() { return resizingZone ? zoneCursor(resizingZone.handle) : 'default'; }
   let draggingStairId: string | null = $state(null);
   let stairDragOffset: Point = { x: 0, y: 0 };
@@ -1176,7 +1182,7 @@
       _drawFloorBelowGhost(getCS(), floorBelow, getFloorBelowOuterIds(floorBelow));
     }
     // Northway: issue areas sit on the floor fill, under walls and openings.
-    if (surveyZones.length) drawSurveyFindingAreas(getCS(), surveyZones);
+    if (overlayZones.length) drawZoneAreas(getCS(), overlayZones);
     drawSnapPoints();
 
     if (layerVis.walls) {
@@ -1240,7 +1246,7 @@
 
     // Entourage (2D presentation symbols) — under furniture
     // Northway: issue codes stay readable above walls and openings.
-    if (surveyZones.length) drawSurveyFindingCodes(getCS(), surveyZones);
+    if (overlayZones.length) drawZoneCodes(getCS(), overlayZones);
 
     if (layerVis.entourage) {
       _drawEntourageItems(getCS(), floor, currentSelectedId, customEntourageDefs, markDirty);
@@ -1255,8 +1261,8 @@
       }
     }
 
-    if (selectedZone) drawSurveyFindingSelection(getCS(), selectedZone);
-    if (drawingZone && placingZoneCode) drawSurveyFindingDraft(getCS(), placingZoneCode, normalizeRect(drawingZone.start, drawingZone.end));
+    if (selectedZone) drawZoneSelection(getCS(), selectedZone);
+    if (drawingZone && placingZoneTemplate) drawZoneDraft(getCS(), placingZoneTemplate, normalizeRect(drawingZone.start, drawingZone.end));
 
     // Object distance dimensions (from selected furniture to room boundaries)
     if (showDimensions && dimSettings.showObjectDistance && currentSelectedId && showFurniture) {
@@ -2357,8 +2363,8 @@
       return;
     }
 
-    // Northway: Add Issue Area. The press starts the rectangle; release creates it.
-    if (placingZoneCode) {
+    // Northway: Add Issue Area / Add Recommended Area / Draw Area. The press starts the rectangle; release creates it.
+    if (placingZoneTemplate) {
       const start = { x: snap(wp.x), y: snap(wp.y) };
       drawingZone = { start, end: start };
       return;
@@ -2555,9 +2561,10 @@
           return;
         }
       }
-      // Northway: resize handles of the selected issue area
+      // Northway: resize handles of the selected overlay zone
+      zoneCyclePoint = null;
       if (!e.ctrlKey && !e.metaKey && selectedZone) {
-        const zoneHandle = findSurveyFindingHandleAt(wp, selectedZone, zoom);
+        const zoneHandle = findZoneHandleAt(wp, selectedZone, zoom);
         if (zoneHandle) {
           const { x, y, width, height } = selectedZone;
           resizingZone = { id: selectedZone.id, handle: zoneHandle, start: { x, y, width, height }, press: { x: e.clientX, y: e.clientY } };
@@ -2646,10 +2653,13 @@
       if (wall) {
         if (selectElement(wall.id, e.shiftKey)) return;
       } else {
-        // Northway: issue areas win over room labels and rooms, so dragging one
-        // never moves the walls underneath.
-        const zone = findSurveyFindingAt(wp, surveyZones);
+        // Northway: overlay zones win over room labels and rooms, so dragging one
+        // never moves the walls underneath. Pressing the selected zone keeps it (to drag it);
+        // releasing without a drag moves on to the next overlapping zone.
+        const hits = zonesAt(wp, overlayZones);
+        const zone = hits.find(hit => hit.id === selectedZone?.id) ?? hits[0];
         if (zone) {
+          if (!e.shiftKey && hits.length > 1 && zone.id === selectedZone?.id) zoneCyclePoint = wp;
           if (selectElement(zone.id, e.shiftKey)) return;
           if (!e.shiftKey) draggingZone = { id: zone.id, start: { x: zone.x, y: zone.y, width: zone.width, height: zone.height }, press: { x: e.clientX, y: e.clientY } };
           return;
@@ -3000,12 +3010,12 @@
     }
     if (draggingZone) {
       const { start, press } = draggingZone;
-      setSurveyFindingRect(draggingZone.id, { ...start, x: snap(start.x + (e.clientX - press.x) / zoom), y: snap(start.y + (e.clientY - press.y) / zoom) });
+      setZoneRect(draggingZone.id, { ...start, x: snap(start.x + (e.clientX - press.x) / zoom), y: snap(start.y + (e.clientY - press.y) / zoom) });
     }
     if (resizingZone) {
       const { start, press, handle } = resizingZone, origin = zoneHandlePoint(start, handle);
       const target = { x: snap(origin.x + (e.clientX - press.x) / zoom), y: snap(origin.y + (e.clientY - press.y) / zoom) };
-      setSurveyFindingRect(resizingZone.id, resizeZoneRect(start, handle, target, MIN_ZONE_SIZE));
+      setZoneRect(resizingZone.id, resizeZoneRect(start, handle, target, MIN_ZONE_SIZE));
     }
     if (draggingEntourageId) {
       const basePos = { x: mousePos.x - dragOffset.x, y: mousePos.y - dragOffset.y };
@@ -3195,22 +3205,28 @@
       endUndoGroup(draggingHandle === 'rotate' ? 'Rotated furniture' : draggingHandle ? 'Resized furniture' : 'Moved furniture');
       furnitureGestureStarted = false;
     }
-    // Northway: finish a new issue area. A click or tiny drag makes a 1 m square.
-    if (drawingZone && placingZoneCode) {
+    // Northway: finish a new overlay zone. A click or tiny drag makes a 1 m square.
+    if (drawingZone && placingZoneTemplate) {
       let zoneRect = normalizeRect(drawingZone.start, drawingZone.end);
       if (zoneRect.width < MIN_ZONE_SIZE || zoneRect.height < MIN_ZONE_SIZE) {
         zoneRect = { x: drawingZone.start.x - 50, y: drawingZone.start.y - 50, width: 100, height: 100 };
       }
-      const zoneId = addSurveyFinding(placingZoneCode, zoneRect);
-      placingSurveyFinding.set(null);
+      const zoneId = addZone(placingZoneTemplate, zoneRect);
+      placingZone.set(null);
       clearAuxiliarySelection();
       selectedRoomId.set(null);
       selectedElementIds.set(new Set());
       selectedElementId.set(zoneId);
     }
     drawingZone = null;
+    if (draggingZone && zoneCyclePoint && !geometryGestureStarted) {
+      const next = pickZoneAt(zoneCyclePoint, overlayZones, draggingZone.id);
+      if (next) selectedElementId.set(next.id);
+    }
+    zoneCyclePoint = null;
     if (geometryGestureStarted) {
-      endUndoGroup(resizingZone ? 'Resized issue area' : draggingZone ? 'Moved issue area' : 'Moved plan geometry');
+      const zoneNoun = (draggingZone ?? resizingZone) && overlayZones.find(zone => zone.id === (draggingZone ?? resizingZone)!.id)?.layer === 'recommended-works' ? 'recommended area' : 'issue area';
+      endUndoGroup(resizingZone ? `Resized ${zoneNoun}` : draggingZone ? `Moved ${zoneNoun}` : 'Moved plan geometry');
       geometryGestureStarted = false;
     }
     draggingZone = null;
@@ -3529,7 +3545,7 @@
       wallStart = null; wallSequenceFirst = null; typedWallLength = '';
       placingFurnitureId.set(null);
       placingEntourageId.set(null);
-      placingSurveyFinding.set(null);
+      placingZone.set(null);
       drawingZone = null;
       placingRotation.set(0);
       editingTextAnnotationId = null;
@@ -3989,7 +4005,7 @@
   let cursorStyle = $derived(
     spaceDown || isPanning || $panMode || (shiftDown && currentTool === 'select') ? 'grab' :
     pickingElevation ? 'crosshair' :
-    drawingZone || placingZoneCode ? 'crosshair' :
+    drawingZone || placingZoneTemplate ? 'crosshair' :
     draggingZone ? 'move' :
     resizingZone ? zoneResizeCursor() :
     draggingFurnitureId ? 'move' :
