@@ -17,7 +17,10 @@ export function isTechnicalStyle(settings: { planStyle?: PlanStyle } | undefined
 
 /** Technical palette: restrained greys only, no brand colours. */
 export const TECHNICAL = {
+  /** Opaque fill for exports on white paper. */
   roomFill: '#f4f4f5',
+  /** Editor fill: blends to roomFill over white but keeps traced underlay images visible. */
+  canvasRoomFill: 'rgba(161, 161, 170, 0.12)',
   roomLabel: '#1f2937',
   roomSubLabel: '#4b5563',
 } as const;

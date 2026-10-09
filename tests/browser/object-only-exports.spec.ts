@@ -11,6 +11,8 @@ for (const kind of ['furniture', 'text', 'measurement', 'dimension', 'column-rou
     if (kind === 'text') floor.textAnnotations = [{ id: 't', x: 9000, y: -8000, rotation: 25, fontSize: 20, text: 'Standalone note', color: '#cc22cc' }];
     if (kind === 'measurement') floor.measurements = [{ id: 'm', x1: 9000, y1: -8000, x2: 9200, y2: -7950 }];
     if (kind === 'dimension') floor.annotations = [{ id: 'a', x1: 9000, y1: -8000, x2: 9200, y2: -8000, offset: -80, label: 'Standalone dimension' }];
+    // Northway: the technical plan style draws fixtures in neutral grey; this checks upstream colours.
+    if (kind === 'furniture') await page.addInitScript(() => localStorage.setItem('o3d_settings', JSON.stringify({ objectLibrary: 'full', planStyle: 'decorative' })));
     await page.goto('/editor');
     await page.getByRole('button', { name: 'Export', exact: true }).click();
     const chooser = page.waitForEvent('filechooser');

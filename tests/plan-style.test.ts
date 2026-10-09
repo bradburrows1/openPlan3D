@@ -21,8 +21,10 @@ it('defaults to the technical style, including legacy settings without planStyle
 });
 
 it('fills every room with the same neutral colour in technical style, ignoring room colours', () => {
-  expect(getRoomFill(room(), 0, true)).toBe(TECHNICAL.roomFill);
-  expect(getRoomFill(room({ color: '#ff0000', floorTexture: 'none' }), 3, true)).toBe(TECHNICAL.roomFill);
+  expect(getRoomFill(room(), 0, true)).toBe(TECHNICAL.canvasRoomFill);
+  expect(getRoomFill(room({ color: '#ff0000', floorTexture: 'none' }), 3, true)).toBe(TECHNICAL.canvasRoomFill);
+  // Translucent, so a traced background image stays visible inside rooms.
+  expect(TECHNICAL.canvasRoomFill).toMatch(/^rgba\(.*, 0\.\d+\)$/);
   expect(getRoomFill(room({ color: '#ff0000' }), 0, false)).toBe('rgba(255, 0, 0, 0.12)');
 });
 

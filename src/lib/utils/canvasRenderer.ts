@@ -1392,7 +1392,7 @@ const ROOM_FILLS_DEFAULT = [
 
 export function getRoomFill(room: Room, index: number, technical = false): string {
   // Technical style: one neutral fill for every room, whatever its colour.
-  if (technical) return TECHNICAL.roomFill;
+  if (technical) return TECHNICAL.canvasRoomFill;
   // Solid-color floors (floorTexture 'none') show the room color much more
   // strongly since there is no texture painted on top.
   const solid = room.floorTexture === 'none';
