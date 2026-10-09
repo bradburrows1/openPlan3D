@@ -117,7 +117,10 @@ function gateway({ port, authPort, restPort, keys }) {
   return new Promise(resolveServer => server.listen(port, '127.0.0.1', () => resolveServer(server)));
 }
 
-/** Start everything; resolves once accounts exist. Call stop() to tear down. */
+/**
+ * Start everything; resolves once accounts exist. Call stop() to tear down.
+ * @param {{ port?: number, quiet?: boolean, jwtSecret?: string }} [options]
+ */
 export async function startLocalStack({ port = 54321, quiet = true, jwtSecret: fixedSecret } = {}) {
   const gotrueBin = process.env.NORTHWAY_GOTRUE_BIN ?? join(localDir, 'auth', 'auth');
   const gotrueMigrations = process.env.NORTHWAY_GOTRUE_MIGRATIONS ?? join(localDir, 'auth', 'migrations');
