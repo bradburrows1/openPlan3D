@@ -90,12 +90,17 @@ describe.skipIf(!available)('Northway Plans with Supabase Auth, PostgREST and RL
     expect(after.data).toEqual({ created_by: stack.users[LOCAL_STAFF[0].email], updated_by: stack.users[LOCAL_STAFF[1].email], revision: 1 });
   });
 
-  it('saves and reopens the complete editable plan, including survey findings', async () => {
+  it('saves and reopens the complete editable plan, including both overlay layers', async () => {
     const brad = await signedIn(LOCAL_STAFF[0]);
     const imported = createProjectFromRoomPlan(JSON.parse(readFileSync('test-roomplan.json', 'utf8')), 'Scan');
     imported.floors[0].surveyFindings = [
-      { id: 'z1', layer: 'survey-findings', code: 'HM', shape: 'rect', x: 0, y: 0, width: 120, height: 80 },
-      { id: 'z2', layer: 'survey-findings', code: 'WM', shape: 'rect', x: 200, y: 50, width: 60, height: 60 },
+      { id: 'z1', layer: 'survey-findings', code: 'HM', name: 'High Moisture', color: '#3b82c4', preset: 'HM', shape: 'rect', x: 0, y: 0, width: 120, height: 80 },
+      { id: 'z2', layer: 'survey-findings', code: 'WM', name: 'Woodworm Activity', color: '#d9823b', preset: 'WM', shape: 'rect', x: 200, y: 50, width: 60, height: 60 },
+      { id: 'z3', layer: 'survey-findings', code: 'DP', name: 'Defective Pointing', color: '#5d5fb8', preset: null, shape: 'rect', x: 10, y: 300, width: 90, height: 40 },
+    ];
+    imported.floors[0].recommendedWorks = [
+      { id: 'r1', layer: 'recommended-works', code: 'WT', name: 'Woodworm Treatment', color: '#d9823b', preset: 'WT', shape: 'rect', x: 200, y: 50, width: 60, height: 60 },
+      { id: 'r2', layer: 'recommended-works', code: 'OF', name: 'Open Floor for Further Inspection', color: '#2fa3a8', preset: null, shape: 'rect', x: 0, y: 0, width: 120, height: 80 },
     ];
     const created = await createProject(brad, { project_name: 'Stage 3 Test Property' }, imported);
     expect((created.project_data as any).id).toBe(created.id); // the document carries its row id
@@ -103,7 +108,7 @@ describe.skipIf(!available)('Northway Plans with Supabase Auth, PostgREST and RL
     expect(reopened.id).toBe(created.id);
     expect(reopened.name).toBe('Stage 3 Test Property');
     const floor = reopened.floors[0], original = imported.floors[0];
-    for (const key of ['walls', 'doors', 'windows', 'furniture', 'rooms', 'surveyFindings'] as const) expect(floor[key]).toEqual(original[key]);
+    for (const key of ['walls', 'doors', 'windows', 'furniture', 'rooms', 'surveyFindings', 'recommendedWorks'] as const) expect(floor[key]).toEqual(original[key]);
 
     reopened.floors[0].surveyFindings![0].x = 40;
     const saved = await saveProject(brad, created.id, 1, reopened, 'Stage 3 Test Property - edited');
@@ -114,6 +119,25 @@ describe.skipIf(!available)('Northway Plans with Supabase Auth, PostgREST and RL
     // The previous good document is kept for recovery.
     const previous = await brad.from('floor_plan_projects').select('previous_project_data').eq('id', created.id).single();
     expect((previous.data!.previous_project_data as any).floors[0].surveyFindings[0].x).toBe(0);
+
+    // A duplicate carries both layers, custom zones included, and is independent.
+    const copy = documentToProject((await getProject(brad, (await duplicateProject(brad, created.id)).id))!);
+    expect(copy.floors[0].surveyFindings).toEqual(documentToProject(again).floors[0].surveyFindings);
+    expect(copy.floors[0].recommendedWorks).toEqual(original.recommendedWorks);
+  });
+
+  it('opens plans saved before Recommended Works existed', async () => {
+    const brad = await signedIn(LOCAL_STAFF[0]);
+    const created = await createProject(brad, { project_name: 'Stage 3 plan' }, plan());
+    // A Stage 3 document: findings without name, colour or preset, and no recommendedWorks.
+    const stage3 = structuredClone(created.project_data) as any;
+    stage3.floors[0].surveyFindings = [{ id: 'old', layer: 'survey-findings', code: 'PD', shape: 'rect', x: 5, y: 6, width: 70, height: 80 }];
+    const written = await brad.from('floor_plan_projects').update({ project_data: stage3 }).eq('id', created.id).select('revision').single();
+    expect(written.error).toBeNull();
+    const opened = documentToProject((await getProject(brad, created.id))!);
+    expect(opened.floors[0].surveyFindings).toEqual([{ id: 'old', layer: 'survey-findings', code: 'PD', name: 'Penetrating Damp', color: '#1f4f8f', preset: 'PD', shape: 'rect', x: 5, y: 6, width: 70, height: 80 }]);
+    expect(opened.floors[0].recommendedWorks).toBeUndefined();
+    await expect(saveProject(brad, created.id, written.data!.revision, opened, 'Stage 3 plan')).resolves.toMatchObject({ revision: written.data!.revision + 1 });
   });
 
   it('refuses stale saves and corrupt documents without touching the saved plan', async () => {

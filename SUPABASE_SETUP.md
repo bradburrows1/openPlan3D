@@ -172,8 +172,8 @@ The same checks run automatically against a local copy of Supabase Auth, PostgRE
 | `id` | UUID. Used in the URL `/projects/<id>`; names and addresses never appear in URLs. |
 | `project_name` | Required, up to 200 characters. |
 | `customer_name`, `property_address` | Optional; searchable in the library. |
-| `project_data` | The **complete editable plan**: the same JSON as "Download JSON". It includes floors, walls, rooms, doors, windows, fixtures, dimensions, labels, Survey Finding zones, images and retained iPhone package data. |
-| `schema_version` | Format of `project_data` (currently 1). Newer formats are refused instead of damaged; older ones are upgraded on open. |
+| `project_data` | The **complete editable plan**: the same JSON as "Download JSON". It includes floors, walls, rooms, doors, windows, fixtures, dimensions, labels, Survey Findings and Recommended Works zones (including custom ones), images and retained iPhone package data. |
+| `schema_version` | Format of `project_data` (currently 1; Stage 4's Recommended Works fields are optional additions, so they need no new version). Newer formats are refused instead of damaged; older ones are upgraded on open. |
 | `revision` | Increases on every plan save. A save only succeeds if nobody else saved since it was opened. Renames don't change it. |
 | `previous_project_data` | The plan as it was before the latest save, for manual recovery. |
 | `created_by`, `updated_by`, `created_at`, `updated_at` | Set by the database, not the browser. |
