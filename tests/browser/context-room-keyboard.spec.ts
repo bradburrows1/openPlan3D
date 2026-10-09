@@ -10,7 +10,11 @@ for (const width of [1440, 390]) test(`keyboard room rename and floor materials 
   plan.floors[0].rooms[0].name = 'Original {name}';
   plan.floors[0].rooms[0].floorTexture = 'none';
   plan.floors[0].rooms[0].labelOffset = { x: 35, y: -20 };
-  await page.addInitScript(() => localStorage.setItem('o3d_locale', 'pt'));
+  await page.addInitScript(() => {
+    localStorage.setItem('o3d_locale', 'pt');
+    // Floor materials are only offered in the decorative plan style.
+    localStorage.setItem('o3d_settings', JSON.stringify({ planStyle: 'decorative' }));
+  });
   await page.goto('/editor');
   await page.getByRole('button', { name: 'Exportar', exact: true }).click();
   const chooser = page.waitForEvent('filechooser');
