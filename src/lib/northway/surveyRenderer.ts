@@ -80,6 +80,12 @@ export function drawSurveyFindingDraft(cs: CanvasState, code: string, rect: Zone
   drawSurveyFindingAreas(cs, [{ id: 'draft', layer: 'survey-findings', code, shape: 'rect', ...rect }]);
 }
 
+/** World position of a resize handle. */
+export function zoneHandlePoint(zone: ZoneRect, handle: ZoneHandle): Point {
+  const [x, y] = handlePoint(zone, handle);
+  return { x, y };
+}
+
 function handlePoint(zone: ZoneRect, handle: ZoneHandle): [number, number] {
   const x = handle.includes('w') ? zone.x : handle.includes('e') ? zone.x + zone.width : zone.x + zone.width / 2;
   const y = handle.includes('n') ? zone.y : handle.includes('s') ? zone.y + zone.height : zone.y + zone.height / 2;

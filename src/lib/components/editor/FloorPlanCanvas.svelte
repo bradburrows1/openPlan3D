@@ -30,7 +30,7 @@
   import { projectSettings, formatLength, formatArea } from '$lib/stores/settings';
   import { planFurniture } from '$lib/northway/fixtures';
   import { addSurveyFinding, setSurveyFindingRect, placingSurveyFinding, normalizeRect, MIN_ZONE_SIZE, type ZoneRect } from '$lib/northway/surveyStore';
-  import { drawSurveyFindingAreas, drawSurveyFindingCodes, drawSurveyFindingSelection, drawSurveyFindingDraft, findSurveyFindingAt, findSurveyFindingHandleAt, resizeZoneRect, zoneCursor, type ZoneHandle } from '$lib/northway/surveyRenderer';
+  import { drawSurveyFindingAreas, drawSurveyFindingCodes, drawSurveyFindingSelection, drawSurveyFindingDraft, findSurveyFindingAt, findSurveyFindingHandleAt, resizeZoneRect, zoneHandlePoint, zoneCursor, type ZoneHandle } from '$lib/northway/surveyRenderer';
   import { isTechnicalStyle } from '$lib/utils/planStyle';
   import type { ProjectSettings } from '$lib/stores/settings';
   import { resizeFurnitureFromHandle, type CanvasState } from '$lib/utils/canvasInteraction';
@@ -219,8 +219,10 @@
   let placingZoneCode: string | null = $state(null);
   onDestroy(placingSurveyFinding.subscribe((code) => { placingZoneCode = code; markDirty(); }));
   let drawingZone: { start: Point; end: Point } | null = $state(null);
-  let draggingZone: { id: string; offset: Point } | null = $state(null);
-  let resizingZone: { id: string; handle: ZoneHandle; start: ZoneRect } | null = $state(null);
+  // Moves and resizes follow screen deltas from the press, like room labels, so the
+  // properties panel opening on selection cannot shift the area under the pointer.
+  let draggingZone: { id: string; start: ZoneRect; press: Point } | null = $state(null);
+  let resizingZone: { id: string; handle: ZoneHandle; start: ZoneRect; press: Point } | null = $state(null);
   let surveyZones = $derived.by(() => dimSettings.showSurveyFindings === false ? [] : currentFloor?.surveyFindings ?? []);
   let selectedZone = $derived.by(() => surveyZones.find(zone => zone.id === currentSelectedId) ?? null);
   $effect(() => { if (currentTool !== 'select') placingSurveyFinding.set(null); });
@@ -2558,7 +2560,7 @@
         const zoneHandle = findSurveyFindingHandleAt(wp, selectedZone, zoom);
         if (zoneHandle) {
           const { x, y, width, height } = selectedZone;
-          resizingZone = { id: selectedZone.id, handle: zoneHandle, start: { x, y, width, height } };
+          resizingZone = { id: selectedZone.id, handle: zoneHandle, start: { x, y, width, height }, press: { x: e.clientX, y: e.clientY } };
           return;
         }
       }
@@ -2649,7 +2651,7 @@
         const zone = findSurveyFindingAt(wp, surveyZones);
         if (zone) {
           if (selectElement(zone.id, e.shiftKey)) return;
-          if (!e.shiftKey) draggingZone = { id: zone.id, offset: { x: wp.x - zone.x, y: wp.y - zone.y } };
+          if (!e.shiftKey) draggingZone = { id: zone.id, start: { x: zone.x, y: zone.y, width: zone.width, height: zone.height }, press: { x: e.clientX, y: e.clientY } };
           return;
         }
         // Check if clicking on a room label (for dragging)
@@ -2997,11 +2999,13 @@
       moveStair(draggingStairId, { x: snap(basePos.x), y: snap(basePos.y) });
     }
     if (draggingZone) {
-      const zone = currentFloor?.surveyFindings?.find(item => item.id === draggingZone!.id);
-      if (zone) setSurveyFindingRect(zone.id, { x: snap(mousePos.x - draggingZone.offset.x), y: snap(mousePos.y - draggingZone.offset.y), width: zone.width, height: zone.height });
+      const { start, press } = draggingZone;
+      setSurveyFindingRect(draggingZone.id, { ...start, x: snap(start.x + (e.clientX - press.x) / zoom), y: snap(start.y + (e.clientY - press.y) / zoom) });
     }
     if (resizingZone) {
-      setSurveyFindingRect(resizingZone.id, resizeZoneRect(resizingZone.start, resizingZone.handle, { x: snap(mousePos.x), y: snap(mousePos.y) }, MIN_ZONE_SIZE));
+      const { start, press, handle } = resizingZone, origin = zoneHandlePoint(start, handle);
+      const target = { x: snap(origin.x + (e.clientX - press.x) / zoom), y: snap(origin.y + (e.clientY - press.y) / zoom) };
+      setSurveyFindingRect(resizingZone.id, resizeZoneRect(start, handle, target, MIN_ZONE_SIZE));
     }
     if (draggingEntourageId) {
       const basePos = { x: mousePos.x - dragOffset.x, y: mousePos.y - dragOffset.y };
