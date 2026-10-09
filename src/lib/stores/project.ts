@@ -242,6 +242,12 @@ export function jumpToUndoStep(targetIndex: number) {
   syncHistoryStore();
 }
 
+/** Northway: undoable active-floor edit and id source for src/lib/northway modules. */
+export function mutateActiveFloor(fn: (floor: Floor) => void, description?: string, coalesceKey?: string) {
+  mutate(fn, description, coalesceKey);
+}
+export const newElementId = () => uid();
+
 function mutate(fn: (floor: Floor) => void, description?: string, coalesceKey?: string) {
   const p = get(currentProject);
   if (!p) return;
@@ -621,6 +627,7 @@ export function removeElement(id: string) {
     if (f.measurements) f.measurements = f.measurements.filter(item => item.id !== id);
     if (f.annotations) f.annotations = f.annotations.filter(item => item.id !== id);
     if (f.entourage) f.entourage = f.entourage.filter((e) => e.id !== id);
+    if (f.surveyFindings) f.surveyFindings = f.surveyFindings.filter((zone) => zone.id !== id);
     if (f.groups) f.groups = f.groups.map(group => ({ ...group, elementIds: group.elementIds.filter(itemId => !removedIds.has(itemId)) })).filter(group => group.elementIds.length >= 2);
   }, 'Deleted element');
 }

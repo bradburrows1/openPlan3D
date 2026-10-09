@@ -155,6 +155,14 @@ export function readProject(value: unknown): Project {
       if (item.opacity !== undefined) number(item.opacity, `${path}.opacity`, 0, 1);
       booleans(item, ['locked'], path);
     });
+    // Northway survey findings: optional, so older and upstream files stay unchanged.
+    if (floor.surveyFindings !== undefined) elements('surveyFindings', (item, path) => {
+      defaults(item, { layer: 'survey-findings', shape: 'rect' });
+      choice(item.layer, ['survey-findings'], `${path}.layer`); choice(item.shape, ['rect'], `${path}.shape`);
+      text(item.code, `${path}.code`, true); strings(item, ['note'], path);
+      number(item.x, `${path}.x`); number(item.y, `${path}.y`);
+      positive(item.width, `${path}.width`); positive(item.height, `${path}.height`);
+    });
     if (floor.backgroundImage !== undefined) {
       const bg = record(floor.backgroundImage, `${path}.backgroundImage`), bgPath = `${path}.backgroundImage`;
       text(bg.dataUrl, `${bgPath}.dataUrl`, true); positioned(bg, bgPath); positive(bg.scale, `${bgPath}.scale`);

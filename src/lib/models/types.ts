@@ -234,6 +234,29 @@ export interface Floor {
   textAnnotations: TextAnnotation[];
   groups: ElementGroup[];
   entourage?: EntourageItem[];
+  /** Northway: observed survey issues, drawn over the plan on their own layer. */
+  surveyFindings?: SurveyFindingZone[];
+}
+
+/** Northway: short code of a survey finding preset (see src/lib/northway/surveyPresets.ts). */
+export type SurveyFindingCode = 'HM' | 'WM' | 'DR' | 'WR' | 'MG' | 'CD' | 'PD' | 'RD' | 'TD' | 'SV';
+
+/**
+ * Northway: a rectangular area where a survey issue was observed. Independent of walls
+ * and rooms. x/y is the top-left corner and width/height the extent along the plan's
+ * X and Y axes, all in world centimetres.
+ */
+export interface SurveyFindingZone {
+  id: string;
+  layer: 'survey-findings';
+  /** Preset code. Unknown codes from newer versions are kept and drawn in grey. */
+  code: SurveyFindingCode | (string & {});
+  shape: 'rect';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  note?: string;
 }
 
 export interface CustomModelDef {
