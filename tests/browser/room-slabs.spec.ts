@@ -38,6 +38,8 @@ function checkSlabs(scene: any, elevation: number, thickness = .05) {
 
 test('nested rooms export one slab at each point on active and stacked floors', async ({ page }, testInfo) => {
   await page.addInitScript(() => {
+    // Northway: the export palette checked below belongs to the decorative plan style.
+    localStorage.setItem('o3d_settings', JSON.stringify({ objectLibrary: 'full', planStyle: 'decorative' }));
     const fill=CanvasRenderingContext2D.prototype.fillText;
     CanvasRenderingContext2D.prototype.fillText=function(text,x,y,maxWidth) {
       if (this.canvas.getAttribute('aria-label')==='Floor plan editor canvas' && text.startsWith('Nested room ')) {

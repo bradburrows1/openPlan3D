@@ -7,6 +7,8 @@ for (const view of ['2D', '3D']) for (const kind of ['wall', 'floor']) {
   test(`${kind} photo texture recovers from an aborted request and wakes the ${view} canvas`, async ({ page }) => {
     if (view === '3D') { test.slow(); await observeGPU(page); }
     await page.addInitScript(() => {
+      // Northway: floor textures are only drawn in the decorative plan style.
+      localStorage.setItem('o3d_settings', JSON.stringify({ objectLibrary: 'full', planStyle: 'decorative' }));
       localStorage.setItem('o3d_tips_seen', JSON.stringify(['first-wall', 'first-furniture', 'first-3d', 'first-export', 'first-door']));
       const now = Date.now.bind(Date);
       (window as any).__textureClockOffset = 0;
