@@ -1,7 +1,10 @@
 <script lang="ts">
   import { t, locale } from '$lib/i18n';
   import { projectServiceMessage } from '$lib/i18n/projectServiceMessages';
-  let { onToggleLayers, layersOpen = false, onToggleHistory, historyOpen = false }: { onToggleLayers?: () => void; layersOpen?: boolean; onToggleHistory?: (trigger: HTMLButtonElement) => void; historyOpen?: boolean } = $props();
+  let { onToggleLayers, layersOpen = false, onToggleHistory, historyOpen = false, cloud = false }: { onToggleLayers?: () => void; layersOpen?: boolean; onToggleHistory?: (trigger: HTMLButtonElement) => void; historyOpen?: boolean; cloud?: boolean } = $props();
+  // Northway Plans: in cloud mode Save writes to the project library, not this browser.
+  import { cloudSaveState, cloudSaveError, cloudLastSaved, saveCloudProject, saveCloudProjectAsNew } from '$lib/northway/cloud/session';
+  import { goto } from '$app/navigation';
   import { captureMain3DPNG } from '$lib/utils/captureMain3D';
   import ExportNotice from '$lib/components/ExportNotice.svelte';
   import { exportNotice, exportPNGWithFeedback, exportPDFWithFeedback as exportPDF } from '$lib/stores/exportNotice';
@@ -121,13 +124,24 @@
   }
 
   async function save() {
-    await manualSave();
+    if (cloud) await saveCloudProject();
+    else await manualSave();
+  }
+
+  async function overwriteCloud() {
+    if (confirm('Replace the version saved elsewhere with your version? Their changes will be kept only as the previous version in the database.')) await saveCloudProject({ overwrite: true });
+  }
+
+  async function saveCloudCopy() {
+    const id = await saveCloudProjectAsNew();
+    if (id) await goto(`/projects/${id}`);
   }
 
   // Relative time for tooltip
   let secondsSinceSave = $state<number | null>(null);
   let lastSavedTime: Date | null = $state(null);
-  onDestroy(lastSavedAt.subscribe(v => { lastSavedTime = v; updateLastSavedText(); }));
+  onDestroy(lastSavedAt.subscribe(v => { if (!cloud) { lastSavedTime = v; updateLastSavedText(); } }));
+  onDestroy(cloudLastSaved.subscribe(v => { if (cloud) { lastSavedTime = v; updateLastSavedText(); } }));
   const lastSavedText = $derived(secondsSinceSave === null ? $t('saveControls.never')
     : secondsSinceSave < 5 ? $t('saveControls.now')
     : secondsSinceSave < 60 ? $t('saveControls.seconds', { count: secondsSinceSave })
@@ -236,8 +250,9 @@
   }
 
   onMount(() => {
-    const stopAutoSave = initAutoSave();
-    initVersionHistory();
+    // Cloud plans are saved explicitly to Northway Plans; no local autosave or snapshots.
+    const stopAutoSave = cloud ? () => {} : initAutoSave();
+    if (!cloud) initVersionHistory();
     const openSettings = () => { if (!hasOpenModal()) settingsOpen = true; };
     window.addEventListener('open-settings', openSettings);
 
@@ -268,9 +283,9 @@
     document.addEventListener('keydown', handleKeydown, true);
     return () => {
       window.removeEventListener('open-settings', openSettings);
-      if (get(saveState) === 'unsaved') void autoSave();
+      if (!cloud && get(saveState) === 'unsaved') void autoSave();
       stopAutoSave();
-      stopVersionHistory();
+      if (!cloud) stopVersionHistory();
       document.removeEventListener('click', handleClickOutside, true);
       document.removeEventListener('keydown', handleKeydown, true);
       clearInterval(interval);
@@ -307,12 +322,12 @@
 <div class="h-12 bg-gradient-to-r from-slate-800 to-slate-700 flex items-center px-4 gap-2 max-xl:px-2 max-xl:gap-1 shrink-0 shadow-sm">
   <!-- Back to Projects -->
   <a
-    href={base || '/'}
+    href={cloud ? '/' : `${base}/local`}
     class="flex items-center gap-1 text-white/70 hover:text-white text-sm transition-colors"
-    title={$t('projectToolbar.back')}
+    title={cloud ? 'Back to Northway Plans' : $t('projectToolbar.back')}
   >
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-    <span class="hidden sm:inline">{$t('projectToolbar.projects')}</span>
+    <span class="hidden sm:inline">{cloud ? 'Back to Plans' : $t('projectToolbar.projects')}</span>
   </a>
 
   <div class="h-5 w-px bg-white/20 max-xl:hidden"></div>
@@ -470,6 +485,7 @@
   <!-- Zoom remains available on the canvas and in the compact toolbar menu. -->
 
   <!-- Version History button -->
+  {#if !cloud}
   <button
     onclick={() => versionHistoryOpen = true}
     class="p-1.5 text-white/80 hover:text-white hover:bg-white/10 rounded transition-colors max-xl:hidden"
@@ -478,6 +494,7 @@
   >
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
   </button>
+  {/if}
 
   <!-- Area summary button -->
   <button
@@ -543,7 +560,7 @@
         {#if onToggleHistory}
           <button class="md:hidden w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left" aria-expanded={historyOpen} aria-label={$t('editorPanels.history')} onclick={() => { onToggleHistory?.(moreButton); moreOpen = false; }}>{$t('undoHistory.title')}</button>
         {/if}
-        <button class="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left" onclick={() => { versionHistoryOpen = true; moreOpen = false; }}>{$t('versions.title')}</button>
+        {#if !cloud}<button class="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left" onclick={() => { versionHistoryOpen = true; moreOpen = false; }}>{$t('versions.title')}</button>{/if}
         <button class="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left" onclick={() => { areaOpen = true; moreOpen = false; }}>{$t('areaSummary.title')}</button>
         <button class="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left" onclick={() => { settingsOpen = true; moreOpen = false; }}>{$t('settings.title')}</button>
       </div>
@@ -600,6 +617,7 @@
         </button>
         <button class="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left" onclick={onExportPackage}>{$t('exportMenu.package')}</button>
         <p class="px-3 pb-2 text-xs text-gray-500">{$t('exportMenu.packageHelp')}</p>
+        {#if !cloud}
         <button class="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left" onclick={onShareWithAssistant}>{$t('exportMenu.assistant')}</button>
         <div class="h-px bg-gray-100 my-1"></div>
         <button class="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left flex items-center gap-2" onclick={onImportJSON}>
@@ -610,11 +628,19 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           {$t('library.new')}
         </button>
+        {:else}
+        <p class="px-3 pt-1 pb-2 text-xs text-gray-500 border-t border-gray-100 mt-1">Exports are copies for reports or backup. Use Save to keep your work in Northway Plans.</p>
+        {/if}
       </div>
     {/if}
   </div>
 
   <!-- Reserve the widest translated status so autosave cannot move toolbar targets. -->
+  {#if cloud}
+  <span class="shrink-0 text-[11px] font-medium whitespace-nowrap {$cloudSaveState === 'saved' ? 'text-emerald-400' : $cloudSaveState === 'saving' ? 'text-amber-300 animate-pulse' : 'text-white/70'}" title={lastSavedText} data-cloud-save-state={$cloudSaveState}>
+    {$cloudSaveState === 'saving' ? 'Saving…' : $cloudSaveState === 'saved' ? 'Saved' : 'Unsaved changes'}
+  </span>
+  {:else}
   <span class="inline-grid shrink-0 text-[11px] font-medium max-xl:hidden">
     {#each (['saveControls.saving', 'saveControls.saved', 'saveControls.unsaved'] as const) as key}
       <span aria-hidden="true" data-save-label={$t(key)} class="invisible col-start-1 row-start-1 whitespace-nowrap before:content-[attr(data-save-label)]"></span>
@@ -629,12 +655,27 @@
     {/if}
     </span>
   </span>
-  <button onclick={save} class="px-3 py-1.5 max-xl:px-2.5 text-sm bg-white text-slate-800 font-semibold rounded-lg hover:bg-blue-50 transition-colors shadow-sm">
+  {/if}
+  <button onclick={save} disabled={cloud && $cloudSaveState === 'saving'} class="px-3 py-1.5 max-xl:px-2.5 text-sm bg-white text-slate-800 font-semibold rounded-lg hover:bg-blue-50 transition-colors shadow-sm disabled:opacity-60">
     {$t('saveControls.save')}
   </button>
 </div>
 
-{#if $saveError}
+{#if cloud && $cloudSaveError}
+  <div role="alert" data-cloud-save-error class="flex flex-wrap items-center gap-3 bg-red-50 border-b border-red-200 px-4 py-3 text-sm text-red-900">
+    <span class="flex-1 min-w-48">{$cloudSaveError}{$cloudSaveState === 'error' || $cloudSaveState === 'conflict' || $cloudSaveState === 'missing' ? ' Your changes are kept on this device until they are saved.' : ''}</span>
+    {#if $cloudSaveState === 'conflict'}
+      <button class="font-semibold underline" onclick={overwriteCloud}>Replace with my version</button>
+      <button class="font-semibold underline" onclick={saveCloudCopy}>Save mine as a new plan</button>
+    {:else if $cloudSaveState === 'missing'}
+      <button class="font-semibold underline" onclick={saveCloudCopy}>Save as a new plan</button>
+    {:else}
+      <button class="font-semibold underline" onclick={save}>{$t('saveControls.retry')}</button>
+    {/if}
+    <button class="font-semibold underline" onclick={onExportJSON}>{$t('saveControls.backup')}</button>
+  </div>
+{/if}
+{#if !cloud && $saveError}
   <div role="alert" class="flex flex-wrap items-center gap-3 bg-red-50 border-b border-red-200 px-4 py-3 text-sm text-red-900">
     <span class="flex-1 min-w-48">{$t('saveControls.error')} {projectServiceMessage($saveError, $locale)}</span>
     {#if $saveConflict}

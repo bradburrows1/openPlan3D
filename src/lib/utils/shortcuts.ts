@@ -1,6 +1,7 @@
 import { selectedTool, activateMeasurementTool, undo, redo, viewMode, selectedElementId, selectedElementIds, removeElement, panMode, beginUndoGroup, endUndoGroup } from '$lib/stores/project';
 import { get } from 'svelte/store';
 import { manualSave } from '$lib/stores/saveStatus';
+import { cloudSession, saveCloudProject } from '$lib/northway/cloud/session';
 import { hasOpenModal } from './modalDialog';
 
 export interface ShortcutContext {
@@ -29,6 +30,8 @@ export function handleGlobalShortcut(e: KeyboardEvent, ctx: ShortcutContext = {}
   if (mod && e.key === 's') {
     e.preventDefault();
     if (ctx.save) ctx.save();
+    // Northway Plans: a cloud plan saves to the project library.
+    else if (get(cloudSession)) void saveCloudProject();
     else void manualSave();
     return true;
   }

@@ -60,8 +60,11 @@ export async function getProject(client: SupabaseClient, id: string): Promise<Pr
 
 export async function createProject(client: SupabaseClient, input: Partial<ProjectMetadata>, project: Project): Promise<ProjectRow> {
   const meta = cleanMetadata(input);
+  // The row id is chosen here so the stored document carries the same id.
+  const id = crypto.randomUUID();
+  const document = projectToDocument({ ...project, id }, meta.project_name);
   const { data, error } = await client.from(TABLE)
-    .insert({ ...meta, project_data: projectToDocument(project, meta.project_name), schema_version: CURRENT_SCHEMA_VERSION })
+    .insert({ id, ...meta, project_data: document, schema_version: CURRENT_SCHEMA_VERSION })
     .select(`${SUMMARY}, project_data, schema_version, revision`).single();
   fail(error, 'create this plan');
   return data as ProjectRow;
@@ -102,9 +105,11 @@ export async function duplicateProject(client: SupabaseClient, id: string): Prom
   const source = await getProject(client, id);
   if (!source) throw new ProjectMissingError();
   const name = `${source.project_name} (Copy)`.slice(0, 200);
+  const copyId = crypto.randomUUID();
+  const document = { ...(source.project_data as Record<string, unknown>), id: copyId, name };
   const { data, error } = await client.from(TABLE)
-    .insert({ project_name: name, customer_name: source.customer_name, property_address: source.property_address,
-      project_data: source.project_data, schema_version: source.schema_version })
+    .insert({ id: copyId, project_name: name, customer_name: source.customer_name, property_address: source.property_address,
+      project_data: document, schema_version: source.schema_version })
     .select(SUMMARY).single();
   fail(error, 'duplicate this plan');
   return data as ProjectSummary;
