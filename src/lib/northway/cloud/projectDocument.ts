@@ -13,10 +13,12 @@ import { readProject } from '$lib/utils/projectValidation';
 
 /**
  * Format of project_data.
- * 1: OpenPlan3D web project document with Northway fields (surveyFindings, …).
- * Bump only for a change readProject() cannot absorb, and add a step to migrateDocument().
+ * 1: OpenPlan3D web project document with Northway fields (surveyFindings, recommendedWorks, …).
+ * 2: adds stable F/R references on every overlay item (Project.surveyReferences), free-text pins
+ *    and lines (Floor.overlayPins, Floor.overlayLines) and Project.surveyDate.
+ * Bump for a change older versions of the app must not edit, and add a step to migrateDocument().
  */
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 export interface ProjectMetadata {
   project_name: string;
@@ -55,7 +57,9 @@ export function projectToDocument(project: Project, projectName: string): Record
 export function migrateDocument(data: unknown, version: number): unknown {
   if (!Number.isInteger(version) || version < 1) throw new Error('This plan has an unrecognised format version.');
   if (version > CURRENT_SCHEMA_VERSION) throw new NewerSchemaError(version);
-  // Version 1 is current; future steps go here (for example: if (version < 2) data = toV2(data)).
+  // 1 → 2: older overlay areas get references F1…/R1… in floor order. readProject() assigns them
+  // (normalizeReferences), so no data rewrite is needed here; the bump stops an older app (an open
+  // tab from before Stage 5) from editing a plan whose pins, lines and references it cannot show.
   return data;
 }
 

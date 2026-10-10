@@ -3,6 +3,10 @@ import { validateItemDetails, validateRetainedDetailState } from './itemDetails'
 import { refreshLegacyFurnitureCategories } from './legacyFurnitureCategories';
 import { validateCustomModelDefinitions } from './customModelDefinitions';
 import { findPreset, isHexColour, UNKNOWN_ZONE_COLOR } from '$lib/northway/zonePresets';
+import { normalizeReferences } from '$lib/northway/references';
+
+/** Pin and line descriptions appear in full in the legend. */
+const MAX_MARKUP_DESCRIPTION = 500;
 
 /** Zone codes are kept short in the editor (4); files may carry up to 8. */
 const MAX_STORED_CODE_LENGTH = 8;
@@ -168,6 +172,7 @@ export function readProject(value: unknown): Project {
         text(item.code, `${path}.code`, true);
         if (item.code.length > MAX_STORED_CODE_LENGTH) fail(`${path}.code`, `must be at most ${MAX_STORED_CODE_LENGTH} characters`);
         if (item.preset !== undefined && item.preset !== null) text(item.preset, `${path}.preset`, true);
+        strings(item, ['ref'], path);
         const preset = findPreset(layer, item.preset === undefined ? item.code : item.preset);
         defaults(item, { preset: preset?.code ?? null, name: preset?.name ?? item.code, color: preset?.color ?? UNKNOWN_ZONE_COLOR });
         strings(item, ['name', 'note'], path);
@@ -176,6 +181,22 @@ export function readProject(value: unknown): Project {
         positive(item.width, `${path}.width`); positive(item.height, `${path}.height`);
       });
     }
+    // Northway free-text pins and lines on either overlay layer.
+    const markup = (item: Record<string, any>, path: string) => {
+      choice(item.layer, ['survey-findings', 'recommended-works'], `${path}.layer`);
+      strings(item, ['ref'], path);
+      text(item.description, `${path}.description`);
+      if (item.description.length > MAX_MARKUP_DESCRIPTION) fail(`${path}.description`, `must be at most ${MAX_MARKUP_DESCRIPTION} characters`);
+      if (!isHexColour(item.color)) fail(`${path}.color`, 'must be a #rrggbb colour');
+    };
+    if (floor.overlayPins !== undefined) elements('overlayPins', (item, path) => {
+      markup(item, path); number(item.x, `${path}.x`); number(item.y, `${path}.y`);
+    });
+    if (floor.overlayLines !== undefined) elements('overlayLines', (item, path) => {
+      markup(item, path);
+      if (!Array.isArray(item.points) || item.points.length < 2) fail(`${path}.points`, 'must have at least two points');
+      item.points.forEach((p: any, i: number) => point(p, `${path}.points[${i}]`));
+    });
     if (floor.backgroundImage !== undefined) {
       const bg = record(floor.backgroundImage, `${path}.backgroundImage`), bgPath = `${path}.backgroundImage`;
       text(bg.dataUrl, `${bgPath}.dataUrl`, true); positioned(bg, bgPath); positive(bg.scale, `${bgPath}.scale`);
@@ -199,6 +220,13 @@ export function readProject(value: unknown): Project {
     if (!Number.isFinite(date.getTime())) fail(key, 'must be a valid date');
     project![key] = date;
   }
+  // Northway: survey metadata and stable overlay references.
+  if (project!.surveyDate !== undefined && (typeof project!.surveyDate !== 'string' || (project!.surveyDate && !/^\d{4}-\d{2}-\d{2}$/.test(project!.surveyDate)))) fail('surveyDate', 'must be a YYYY-MM-DD date');
+  if (project!.surveyReferences !== undefined) {
+    const refs = record(project!.surveyReferences, 'surveyReferences');
+    for (const key of ['F', 'R']) { defaults(refs, { [key]: 0 }); number(refs[key], `surveyReferences.${key}`, 0); if (!Number.isInteger(refs[key])) fail(`surveyReferences.${key}`, 'must be a whole number'); }
+  }
+  normalizeReferences(project! as Project);
   refreshLegacyFurnitureCategories(project! as Project);
   return project! as Project;
 }

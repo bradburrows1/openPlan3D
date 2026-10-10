@@ -238,6 +238,10 @@ export interface Floor {
   surveyFindings?: SurveyFindingZone[];
   /** Northway: works recommended after the survey, on a second, separate layer. */
   recommendedWorks?: RecommendedWorkZone[];
+  /** Northway: free-text pins on either overlay layer. */
+  overlayPins?: OverlayPin[];
+  /** Northway: free-text lines and polylines on either overlay layer. */
+  overlayLines?: OverlayLine[];
 }
 
 /** Northway: short code of a survey finding preset (see src/lib/northway/zonePresets.ts). */
@@ -254,7 +258,9 @@ export type OverlayLayer = 'survey-findings' | 'recommended-works';
  */
 interface OverlayZoneBase {
   id: string;
-  /** Short code shown on the plan (HM, WT, or a custom code). */
+  /** Stable plan reference (F1, R3, …); assigned once and never renumbered. See src/lib/northway/references.ts. */
+  ref?: string;
+  /** Short type code (HM, WT, or a custom code), listed in the legend after the reference. */
   code: string;
   /** Description for the legend; filled from the preset on load when missing (Stage 2 zones). */
   name?: string;
@@ -280,6 +286,34 @@ export interface RecommendedWorkZone extends OverlayZoneBase {
 }
 
 export type OverlayZone = SurveyFindingZone | RecommendedWorkZone;
+
+/**
+ * Northway: a free-text point marker on one overlay layer. Only its reference (F1, R2…) is drawn on
+ * the plan; the description appears in the legend.
+ */
+export interface OverlayPin {
+  id: string;
+  layer: OverlayLayer;
+  ref?: string;
+  description: string;
+  /** '#rrggbb'; the layer decides the marker style. */
+  color: string;
+  x: number;
+  y: number;
+}
+
+/** Northway: a free-text line or polyline markup (two or more points, world cm) on one overlay layer. */
+export interface OverlayLine {
+  id: string;
+  layer: OverlayLayer;
+  ref?: string;
+  description: string;
+  color: string;
+  points: Point[];
+}
+
+/** Northway: anything on an overlay layer that carries a stable reference. */
+export type OverlayItem = OverlayZone | OverlayPin | OverlayLine;
 
 export interface CustomModelDef {
   id: string;
@@ -308,4 +342,8 @@ export interface Project {
   createdAt: Date;
   updatedAt: Date;
   customEntourage?: CustomEntourageDef[];
+  /** Northway: highest reference number issued per layer (F, R), so deleted references are never reused. */
+  surveyReferences?: { F: number; R: number };
+  /** Northway: survey date for exports, 'YYYY-MM-DD'. */
+  surveyDate?: string;
 }

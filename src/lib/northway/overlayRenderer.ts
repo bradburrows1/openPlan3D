@@ -3,8 +3,8 @@
  * Recommended Works). Pure functions over a CanvasState, shared by the editor canvas
  * and the exporters, so exported position, scale and styling always match the editor.
  *
- * Findings: tinted fill, solid border, code top-left.
- * Recommendations: very light fill, diagonal hatch, dashed heavier border, code on a
+ * Findings: tinted fill, solid border, reference (F1…) top-left.
+ * Recommendations: very light fill, diagonal hatch, dashed heavier border, reference (R1…) on a
  * white tag top-right. The two read differently without relying on colour.
  */
 import type { OverlayZone, Point } from '$lib/models/types';
@@ -17,7 +17,7 @@ const HANDLES: readonly ZoneHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', '
 /** Screen-pixel size of resize handles and their hit area. */
 const HANDLE_SIZE = 8;
 const HANDLE_HIT = 9;
-const CODE_FONT = '600 11px sans-serif';
+const CODE_FONT = '700 11px sans-serif';
 
 function screenRect(cs: CanvasState, zone: ZoneRect) {
   const a = worldToScreen(cs, zone.x, zone.y), b = worldToScreen(cs, zone.x + zone.width, zone.y + zone.height);
@@ -73,7 +73,7 @@ export function zoneCodeBox(r: { x: number; y: number; width: number; height: nu
   return { x, y: r.y + 4, width: boxWidth, height: boxHeight, pad };
 }
 
-/** Short codes only (HM, WT, …), drawn discreetly in each layer's corner. */
+/** Each zone's stable reference (F1, R2, …; the type code for unreferenced drafts), drawn discreetly in its layer's corner. */
 export function drawZoneCodes(cs: CanvasState, zones: readonly OverlayZone[]): void {
   const { ctx } = cs;
   ctx.save();
@@ -82,7 +82,7 @@ export function drawZoneCodes(cs: CanvasState, zones: readonly OverlayZone[]): v
   ctx.textBaseline = 'top';
   ctx.setLineDash([]);
   for (const zone of stacked(zones)) {
-    const { code, color } = zoneAppearance(zone), style = LAYER_STYLES[zone.layer];
+    const { color } = zoneAppearance(zone), style = LAYER_STYLES[zone.layer], code = zoneLabel(zone);
     const box = zoneCodeBox(screenRect(cs, zone), zone.layer, ctx.measureText(code).width);
     if (style.codeTag) {
       ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
@@ -95,6 +95,11 @@ export function drawZoneCodes(cs: CanvasState, zones: readonly OverlayZone[]): v
     ctx.fillText(code, box.x + box.pad, box.y + box.pad);
   }
   ctx.restore();
+}
+
+/** The text drawn on the plan for a zone: its reference, or its code before it has one. */
+export function zoneLabel(zone: Pick<OverlayZone, 'ref' | 'code'>): string {
+  return zone.ref ?? zone.code;
 }
 
 /** Selection outline plus eight resize handles, drawn on top of the plan. */

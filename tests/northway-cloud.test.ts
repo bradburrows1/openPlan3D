@@ -80,7 +80,7 @@ describe.skipIf(!available)('Northway Plans with Supabase Auth, PostgREST and RL
   it('lets every staff member work on every plan, with server-owned bookkeeping', async () => {
     const brad = await signedIn(LOCAL_STAFF[0]), lewis = await signedIn(LOCAL_STAFF[1]);
     const created = await createProject(brad, { project_name: '  14 Moor Lane - Smith  ', customer_name: ' ', property_address: '14 Moor Lane' }, plan());
-    expect(created).toMatchObject({ project_name: '14 Moor Lane - Smith', customer_name: null, property_address: '14 Moor Lane', revision: 1, schema_version: 1 });
+    expect(created).toMatchObject({ project_name: '14 Moor Lane - Smith', customer_name: null, property_address: '14 Moor Lane', revision: 1, schema_version: 2 });
     const row = await lewis.from('floor_plan_projects').select('created_by, updated_by').eq('id', created.id).single();
     expect(row.data!.created_by).toBe(stack.users[LOCAL_STAFF[0].email]);
 
@@ -94,13 +94,14 @@ describe.skipIf(!available)('Northway Plans with Supabase Auth, PostgREST and RL
     const brad = await signedIn(LOCAL_STAFF[0]);
     const imported = createProjectFromRoomPlan(JSON.parse(readFileSync('test-roomplan.json', 'utf8')), 'Scan');
     imported.floors[0].surveyFindings = [
-      { id: 'z1', layer: 'survey-findings', code: 'HM', name: 'High Moisture', color: '#3b82c4', preset: 'HM', shape: 'rect', x: 0, y: 0, width: 120, height: 80 },
-      { id: 'z2', layer: 'survey-findings', code: 'WM', name: 'Woodworm Activity', color: '#d9823b', preset: 'WM', shape: 'rect', x: 200, y: 50, width: 60, height: 60 },
-      { id: 'z3', layer: 'survey-findings', code: 'DP', name: 'Defective Pointing', color: '#5d5fb8', preset: null, shape: 'rect', x: 10, y: 300, width: 90, height: 40 },
+      { id: 'z1', layer: 'survey-findings', ref: 'F1', code: 'HM', name: 'High Moisture', color: '#3b82c4', preset: 'HM', shape: 'rect', x: 0, y: 0, width: 120, height: 80 },
+      { id: 'z2', layer: 'survey-findings', ref: 'F2', code: 'WM', name: 'Woodworm Activity', color: '#d9823b', preset: 'WM', shape: 'rect', x: 200, y: 50, width: 60, height: 60 },
+      { id: 'z3', layer: 'survey-findings', ref: 'F3', code: 'DP', name: 'Defective Pointing', color: '#5d5fb8', preset: null, shape: 'rect', x: 10, y: 300, width: 90, height: 40 },
     ];
+    imported.surveyReferences = { F: 3, R: 2 };
     imported.floors[0].recommendedWorks = [
-      { id: 'r1', layer: 'recommended-works', code: 'WT', name: 'Woodworm Treatment', color: '#d9823b', preset: 'WT', shape: 'rect', x: 200, y: 50, width: 60, height: 60 },
-      { id: 'r2', layer: 'recommended-works', code: 'OF', name: 'Open Floor for Further Inspection', color: '#2fa3a8', preset: null, shape: 'rect', x: 0, y: 0, width: 120, height: 80 },
+      { id: 'r1', layer: 'recommended-works', ref: 'R1', code: 'WT', name: 'Woodworm Treatment', color: '#d9823b', preset: 'WT', shape: 'rect', x: 200, y: 50, width: 60, height: 60 },
+      { id: 'r2', layer: 'recommended-works', ref: 'R2', code: 'OF', name: 'Open Floor for Further Inspection', color: '#2fa3a8', preset: null, shape: 'rect', x: 0, y: 0, width: 120, height: 80 },
     ];
     const created = await createProject(brad, { project_name: 'Stage 3 Test Property' }, imported);
     expect((created.project_data as any).id).toBe(created.id); // the document carries its row id
@@ -126,16 +127,17 @@ describe.skipIf(!available)('Northway Plans with Supabase Auth, PostgREST and RL
     expect(copy.floors[0].recommendedWorks).toEqual(original.recommendedWorks);
   });
 
-  it('opens plans saved before Recommended Works existed', async () => {
+  it('opens plans saved before Recommended Works and references existed', async () => {
     const brad = await signedIn(LOCAL_STAFF[0]);
     const created = await createProject(brad, { project_name: 'Stage 3 plan' }, plan());
     // A Stage 3 document: findings without name, colour or preset, and no recommendedWorks.
     const stage3 = structuredClone(created.project_data) as any;
     stage3.floors[0].surveyFindings = [{ id: 'old', layer: 'survey-findings', code: 'PD', shape: 'rect', x: 5, y: 6, width: 70, height: 80 }];
-    const written = await brad.from('floor_plan_projects').update({ project_data: stage3 }).eq('id', created.id).select('revision').single();
+    delete stage3.surveyReferences;
+    const written = await brad.from('floor_plan_projects').update({ project_data: stage3, schema_version: 1 }).eq('id', created.id).select('revision').single();
     expect(written.error).toBeNull();
     const opened = documentToProject((await getProject(brad, created.id))!);
-    expect(opened.floors[0].surveyFindings).toEqual([{ id: 'old', layer: 'survey-findings', code: 'PD', name: 'Penetrating Damp', color: '#1f4f8f', preset: 'PD', shape: 'rect', x: 5, y: 6, width: 70, height: 80 }]);
+    expect(opened.floors[0].surveyFindings).toEqual([{ id: 'old', layer: 'survey-findings', ref: 'F1', code: 'PD', name: 'Penetrating Damp', color: '#1f4f8f', preset: 'PD', shape: 'rect', x: 5, y: 6, width: 70, height: 80 }]);
     expect(opened.floors[0].recommendedWorks).toBeUndefined();
     await expect(saveProject(brad, created.id, written.data!.revision, opened, 'Stage 3 plan')).resolves.toMatchObject({ revision: written.data!.revision + 1 });
   });
