@@ -92,7 +92,7 @@
 
 <svelte:window on:keydown={onEditorKeydown} />
 
-  <div class="h-screen flex flex-col overflow-hidden">
+  <div class="h-screen flex flex-col overflow-hidden" data-northway-touch={cloud ? '' : undefined}>
     <TopBar {cloud} onToggleLayers={() => showLayers = !showLayers} layersOpen={showLayers} onToggleHistory={toggleHistory} historyOpen={showUndoHistory} />
     <!-- Keep canvas/viewer controls beneath toolbar menus and project dialogs. -->
     <div class="flex flex-1 overflow-hidden isolate">
@@ -367,4 +367,5 @@
 
   <CommandPalette bind:open={commandPaletteOpen} />
   <PrintLayout bind:open={printOpen} />
-  <OnboardingTooltip />
+  <!-- Northway: upstream onboarding tips (3D, SVG, …) do not apply to the survey editor. -->
+  {#if !cloud}<OnboardingTooltip />{/if}

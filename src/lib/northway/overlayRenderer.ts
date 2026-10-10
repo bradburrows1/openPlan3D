@@ -105,7 +105,7 @@ export function zoneLabel(zone: Pick<OverlayZone, 'ref' | 'code'>): string {
 }
 
 /** Selection outline plus eight resize handles, drawn on top of the plan. */
-export function drawZoneSelection(cs: CanvasState, zone: ZoneRect): void {
+export function drawZoneSelection(cs: CanvasState, zone: ZoneRect, handleSize = HANDLE_SIZE): void {
   const { ctx } = cs;
   const r = screenRect(cs, zone);
   ctx.save();
@@ -117,8 +117,8 @@ export function drawZoneSelection(cs: CanvasState, zone: ZoneRect): void {
   ctx.fillStyle = '#ffffff';
   for (const handle of HANDLES) {
     const p = worldToScreen(cs, ...handlePoint(zone, handle));
-    ctx.fillRect(p.x - HANDLE_SIZE / 2, p.y - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE);
-    ctx.strokeRect(p.x - HANDLE_SIZE / 2, p.y - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE);
+    ctx.fillRect(p.x - handleSize / 2, p.y - handleSize / 2, handleSize, handleSize);
+    ctx.strokeRect(p.x - handleSize / 2, p.y - handleSize / 2, handleSize, handleSize);
   }
   ctx.restore();
 }
@@ -162,9 +162,9 @@ export function pickZoneAt(p: Point, zones: readonly OverlayZone[] | undefined, 
   return current < 0 ? hits[0] : hits[(current + 1) % hits.length];
 }
 
-/** Resize handle of a selected zone under a world point. */
-export function findZoneHandleAt(p: Point, zone: ZoneRect, zoom: number): ZoneHandle | null {
-  const tolerance = HANDLE_HIT / zoom;
+/** Resize handle of a selected zone under a world point. `hit` is the screen-pixel reach (larger for touch). */
+export function findZoneHandleAt(p: Point, zone: ZoneRect, zoom: number, hit = HANDLE_HIT): ZoneHandle | null {
+  const tolerance = hit / zoom;
   for (const handle of HANDLES) {
     const [x, y] = handlePoint(zone, handle);
     if (Math.abs(p.x - x) <= tolerance && Math.abs(p.y - y) <= tolerance) return handle;

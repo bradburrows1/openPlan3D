@@ -138,7 +138,7 @@ export function drawMarkupMarkers(cs: CanvasState, pins: readonly OverlayPin[], 
 }
 
 /** Selection: a dashed ring around a pin, or the line's vertex handles. */
-export function drawMarkupSelection(cs: CanvasState, item: OverlayPin | OverlayLine): void {
+export function drawMarkupSelection(cs: CanvasState, item: OverlayPin | OverlayLine, handleSize = VERTEX_HANDLE): void {
   const { ctx } = cs;
   ctx.save();
   ctx.strokeStyle = '#3b82f6';
@@ -149,8 +149,8 @@ export function drawMarkupSelection(cs: CanvasState, item: OverlayPin | OverlayL
     ctx.setLineDash([]);
     ctx.fillStyle = '#ffffff';
     for (const p of screenPoints(cs, item.points)) {
-      ctx.fillRect(p.x - VERTEX_HANDLE / 2, p.y - VERTEX_HANDLE / 2, VERTEX_HANDLE, VERTEX_HANDLE);
-      ctx.strokeRect(p.x - VERTEX_HANDLE / 2, p.y - VERTEX_HANDLE / 2, VERTEX_HANDLE, VERTEX_HANDLE);
+      ctx.fillRect(p.x - handleSize / 2, p.y - handleSize / 2, handleSize, handleSize);
+      ctx.strokeRect(p.x - handleSize / 2, p.y - handleSize / 2, handleSize, handleSize);
     }
   } else {
     const p = worldToScreen(cs, item.x, item.y);
@@ -183,24 +183,25 @@ function segmentDistance(p: Point, a: Point, b: Point): number {
 }
 
 /** Topmost pin or line under a world point (pins and line markers first, then line bands). */
-export function findMarkupAt(p: Point, pins: readonly OverlayPin[], lines: readonly OverlayLine[], zoom: number, measure: (label: string) => number = () => MARKER_RADIUS): OverlayPin | OverlayLine | null {
+/** `slack` widens every target in screen pixels (used for touch). */
+export function findMarkupAt(p: Point, pins: readonly OverlayPin[], lines: readonly OverlayLine[], zoom: number, measure: (label: string) => number = () => MARKER_RADIUS, slack = 0): OverlayPin | OverlayLine | null {
   for (let i = pins.length - 1; i >= 0; i--) {
-    if (Math.hypot(p.x - pins[i].x, p.y - pins[i].y) <= (measure(pinLabel(pins[i])) + 2) / zoom) return pins[i];
+    if (Math.hypot(p.x - pins[i].x, p.y - pins[i].y) <= (measure(pinLabel(pins[i])) + 2 + slack) / zoom) return pins[i];
   }
   for (let i = lines.length - 1; i >= 0; i--) {
     const mid = lineMidpoint(lines[i].points);
-    if (Math.hypot(p.x - mid.x, p.y - mid.y) <= (measure(pinLabel(lines[i])) + 2) / zoom) return lines[i];
+    if (Math.hypot(p.x - mid.x, p.y - mid.y) <= (measure(pinLabel(lines[i])) + 2 + slack) / zoom) return lines[i];
   }
   for (let i = lines.length - 1; i >= 0; i--) {
-    const pts = lines[i].points, tolerance = (MARKUP_STYLES[lines[i].layer].bandWidth / 2 + 4) / zoom;
+    const pts = lines[i].points, tolerance = (MARKUP_STYLES[lines[i].layer].bandWidth / 2 + 4 + slack) / zoom;
     for (let k = 1; k < pts.length; k++) if (segmentDistance(p, pts[k - 1], pts[k]) <= tolerance) return lines[i];
   }
   return null;
 }
 
 /** Index of the selected line's vertex under a world point, or -1. */
-export function findLineVertexAt(p: Point, line: OverlayLine, zoom: number): number {
-  const tolerance = (VERTEX_HANDLE / 2 + 3) / zoom;
+export function findLineVertexAt(p: Point, line: OverlayLine, zoom: number, slack = 0): number {
+  const tolerance = (VERTEX_HANDLE / 2 + 3 + slack) / zoom;
   return line.points.findIndex(v => Math.abs(p.x - v.x) <= tolerance && Math.abs(p.y - v.y) <= tolerance);
 }
 

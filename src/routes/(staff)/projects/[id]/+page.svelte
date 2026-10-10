@@ -3,6 +3,7 @@
   import { onDestroy, untrack } from 'svelte';
   import { page } from '$app/state';
   import { beforeNavigate } from '$app/navigation';
+  import PortraitHint from '$lib/northway/components/PortraitHint.svelte';
   import EditorWorkspace from '$lib/components/editor/EditorWorkspace.svelte';
   import { currentProject } from '$lib/stores/project';
   import { requireSupabase } from '$lib/northway/cloud/supabase';
@@ -52,6 +53,7 @@
 
 {#if status === 'ready'}
   <EditorWorkspace cloud />
+  <PortraitHint />
   {#if $recoveryOffer}
     <div role="alert" data-recovery-offer class="fixed top-16 left-1/2 -translate-x-1/2 z-[100] w-[calc(100vw-2rem)] max-w-lg bg-amber-50 border border-amber-200 text-amber-900 rounded-lg shadow-lg px-4 py-3 text-sm">
       <p class="font-semibold">Unsaved changes from this device were found</p>

@@ -249,6 +249,10 @@
   let draggingLine: { id: string; start: Point[]; vertex: number; press: Point } | null = $state(null);
   const markupRadius = (label: string) => markerRadius(getCS().ctx, label);
   function lineMoveActive() { return !!draggingLine && draggingLine.vertex < 0; }
+  /** Touch screens get finger-sized overlay handles (drawn) and reach (while a touch is in progress). */
+  const coarsePointer = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+  const handleSize = () => coarsePointer ? 14 : undefined;
+  const touchSlack = () => touchDriven ? 12 : 0;
   function zoneResizeCursor() { return resizingZone ? zoneCursor(resizingZone.handle) : 'default'; }
   let draggingStairId: string | null = $state(null);
   let stairDragOffset: Point = { x: 0, y: 0 };
@@ -1280,9 +1284,9 @@
     }
 
     if (overlayPins.length || overlayLines.length) drawMarkupMarkers(getCS(), overlayPins, overlayLines);
-    if (selectedMarkup) drawMarkupSelection(getCS(), selectedMarkup);
+    if (selectedMarkup) drawMarkupSelection(getCS(), selectedMarkup, handleSize());
     if (markupTool?.kind === 'line' && lineDraftPoints.length) drawLineDraft(getCS(), markupTool.layer, markupTool.draft ? itemColor({ layer: markupTool.layer, priority: markupTool.draft.priority }) : '#475569', lineDraftPoints, { x: snap(mousePos.x), y: snap(mousePos.y) });
-    if (selectedZone) drawZoneSelection(getCS(), selectedZone);
+    if (selectedZone) drawZoneSelection(getCS(), selectedZone, handleSize());
     if (drawingZone && placingZoneTemplate) drawZoneDraft(getCS(), placingZoneTemplate, normalizeRect(drawingZone.start, drawingZone.end));
 
     // Object distance dimensions (from selected furniture to room boundaries)
@@ -2595,13 +2599,13 @@
       // line's vertices can be dragged; its band or marker moves the whole line.
       if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
         if (selectedMarkup && 'points' in selectedMarkup) {
-          const vertex = findLineVertexAt(wp, selectedMarkup, zoom);
+          const vertex = findLineVertexAt(wp, selectedMarkup, zoom, touchSlack());
           if (vertex >= 0) {
             draggingLine = { id: selectedMarkup.id, start: selectedMarkup.points.map(p => ({ ...p })), vertex, press: { x: e.clientX, y: e.clientY } };
             return;
           }
         }
-        const markup = findMarkupAt(wp, overlayPins, overlayLines, zoom, markupRadius);
+        const markup = findMarkupAt(wp, overlayPins, overlayLines, zoom, markupRadius, touchSlack());
         if (markup) {
           clearAuxiliarySelection();
           selectedRoomId.set(null);
@@ -2615,7 +2619,7 @@
       // Northway: resize handles of the selected overlay zone
       zoneCyclePoint = null;
       if (!e.ctrlKey && !e.metaKey && selectedZone) {
-        const zoneHandle = findZoneHandleAt(wp, selectedZone, zoom);
+        const zoneHandle = findZoneHandleAt(wp, selectedZone, zoom, touchDriven ? 22 : undefined);
         if (zoneHandle) {
           const { x, y, width, height } = selectedZone;
           resizingZone = { id: selectedZone.id, handle: zoneHandle, start: { x, y, width, height }, press: { x: e.clientX, y: e.clientY } };
@@ -2875,7 +2879,7 @@
 
     if ((draggingFurnitureId || draggingHandle) && !furnitureGestureStarted) {
       // Treat small pointer movement during a click as selection, not a snapped move.
-      if (Math.hypot(e.clientX - canvasPressPosition.x, e.clientY - canvasPressPosition.y) < 3) return;
+      if (Math.hypot(e.clientX - canvasPressPosition.x, e.clientY - canvasPressPosition.y) < dragSlop()) return;
       beginUndoGroup();
       furnitureGestureStarted = true;
     }
@@ -2883,7 +2887,7 @@
     if ((draggingWallEndpoint || draggingWallParallel || draggingCurveHandle || draggingRoomId
       || draggingStairId || draggingColumnId || draggingTextAnnotationId || draggingMultiSelect
       || draggingDoorId || draggingWindowId || draggingGuideId || draggingEntourageId || resizingEntourageId || draggingZone || resizingZone || draggingPin || draggingLine) && !geometryGestureStarted) {
-      if (Math.hypot(e.clientX - canvasPressPosition.x, e.clientY - canvasPressPosition.y) < 3) return;
+      if (Math.hypot(e.clientX - canvasPressPosition.x, e.clientY - canvasPressPosition.y) < dragSlop()) return;
       beginUndoGroup();
       geometryGestureStarted = true;
     }
@@ -2892,7 +2896,7 @@
     // masquerade as pointer movement. A click must not create a drag history item.
     if (draggingRoomLabelId) {
       const dx = e.clientX - roomLabelDragStart.x, dy = e.clientY - roomLabelDragStart.y;
-      if (!roomLabelDragOffset && Math.hypot(dx, dy) < 3) return;
+      if (!roomLabelDragOffset && Math.hypot(dx, dy) < dragSlop()) return;
       if (!roomLabelDragOffset) beginUndoGroup();
       const newOffset = { x: roomLabelOrigOffset.x + dx / roomLabelDragZoom, y: roomLabelOrigOffset.y + dy / roomLabelDragZoom };
       roomLabelDragOffset = newOffset;
@@ -3373,6 +3377,24 @@
   // compatibility mouse events (which would double-fire the handlers).
   let pinchState: { dist: number; cx: number; cy: number } | null = null;
   let singleTouchActive = false;
+  // Northway: a touch only becomes a press once the finger moves or lifts, so a two-finger pinch or
+  // pan that starts with one finger never places a pin, starts an area or adds a line point (no
+  // timer: on a busy page a timer could fire before the second finger arrives). Touch (finger or
+  // Apple Pencil) also needs more movement than a mouse before a press becomes a drag, so a tap
+  // selects without nudging what it touched.
+  const TOUCH_PRESS_SLOP = 6;
+  let pendingPress: { x: number; y: number } | null = null;
+  let touchDriven = false;
+  function dragSlop() { return touchDriven ? 8 : 3; }
+  function flushPress() {
+    if (!pendingPress) return;
+    const press = pendingPress;
+    pendingPress = null;
+    dispatchMouse('mousedown', press.x, press.y);
+  }
+  function dropPress() {
+    pendingPress = null;
+  }
   let singleTouchOrigin: { clientX: number; clientY: number } | null = null;
   let singleTouchMoved = false;
   let lastTapTime = 0;
@@ -3394,12 +3416,18 @@
     e.preventDefault();
     if (e.touches.length === 1) {
       singleTouchActive = true;
+      touchDriven = true;
       singleTouchOrigin = { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
       singleTouchMoved = false;
-      dispatchMouse('mousedown', e.touches[0].clientX, e.touches[0].clientY);
+      dropPress();
+      pendingPress = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     } else if (e.touches.length === 2) {
       lastTapTime = 0;
       singleTouchOrigin = null;
+      // Second finger landed before the first became a press: it is a pinch or pan, never a draw.
+      if (pendingPress) { dropPress(); singleTouchActive = false; }
+      // An area still being dragged out when a second finger lands was the start of a pinch: drop it.
+      if (singleTouchActive && drawingZone) { drawingZone = null; singleTouchActive = false; }
       // Second finger landed: abandon any single-finger drag and start pinching
       if (singleTouchActive) {
         dispatchMouse('mouseup', e.touches[0].clientX, e.touches[0].clientY);
@@ -3436,15 +3464,21 @@
       pinchState = { dist, cx, cy };
       markDirty();
     } else if (singleTouchActive && e.touches.length === 1) {
-      if (singleTouchOrigin && Math.hypot(e.touches[0].clientX - singleTouchOrigin.clientX,
-          e.touches[0].clientY - singleTouchOrigin.clientY) > 10) singleTouchMoved = true;
+      const travelled = singleTouchOrigin ? Math.hypot(e.touches[0].clientX - singleTouchOrigin.clientX, e.touches[0].clientY - singleTouchOrigin.clientY) : 0;
+      if (travelled > 10) singleTouchMoved = true;
+      if (pendingPress) {
+        if (travelled < TOUCH_PRESS_SLOP) return; // still deciding between a tap and a pinch
+        flushPress();
+      }
       dispatchMouse('mousemove', e.touches[0].clientX, e.touches[0].clientY);
     }
   }
 
   function onTouchEnd(e: TouchEvent) {
     e.preventDefault();
+    if (e.touches.length === 0) touchDriven = false;
     if (e.type === 'touchcancel') {
+      dropPress();
       pinchState = null;
       lastTapTime = 0;
       if (singleTouchActive) {
@@ -3466,8 +3500,11 @@
       if (t && singleTouchOrigin && Math.hypot(t.clientX - singleTouchOrigin.clientX,
           t.clientY - singleTouchOrigin.clientY) > 10) singleTouchMoved = true;
       singleTouchOrigin = null;
-      if (!t) return;
+      if (!t) { dropPress(); return; }
+      flushPress(); // a quick tap: press now, then release
+      touchDriven = true; // the release below still belongs to the touch gesture
       dispatchMouse('mouseup', t.clientX, t.clientY);
+      touchDriven = false;
       if (singleTouchMoved) { lastTapTime = 0; return; }
       // Synthesize click so document-level click-outside handlers (menus) fire
       dispatchMouse('click', t.clientX, t.clientY);

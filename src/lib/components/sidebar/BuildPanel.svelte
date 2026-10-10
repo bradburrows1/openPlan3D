@@ -18,6 +18,7 @@
   import { FIXTURE_LIBRARY_IDS, FIXED_FIXTURE_IDS, isSurveyLibrary } from '$lib/northway/fixtures';
   import { projectSettings } from '$lib/stores/settings';
   import { placingZone, cancelMarkupTool } from '$lib/northway/overlayStore';
+  import { cloudSession } from '$lib/northway/cloud/session';
   import OverlayLayerGroup from '$lib/northway/components/OverlayLayerGroup.svelte';
   import PlanReferences from '$lib/northway/components/PlanReferences.svelte';
   import type { FurnitureDef } from '$lib/utils/furnitureCatalog';
@@ -504,6 +505,8 @@
             <div class="text-xs text-gray-400">{$t('buildTools.imageHelp')}</div>
           </div>
         </button>
+        <!-- Northway: in a saved plan, scans are imported from the library (New Plan → Import Plan), not over the open plan. -->
+        {#if !$cloudSession}
         <button
           class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors hover:bg-gray-50 text-gray-700"
           onclick={onImportRoomPlan}
@@ -516,6 +519,7 @@
             <div class="text-xs text-gray-400">{$t('buildTools.roomplanHelp')}</div>
           </div>
         </button>
+        {/if}
 
         <button
           class="w-full flex items-center justify-between px-1 py-2 mt-3"

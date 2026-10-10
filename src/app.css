@@ -154,3 +154,17 @@ dialog.modal-overlay::backdrop { background: transparent; }
     break-inside: avoid;
   }
 }
+
+/* ── Northway: touch screens (iPad) ───────────────────────────── */
+/* No double-tap page zoom on controls; the plan canvas has its own pinch zoom. */
+html { touch-action: manipulation; }
+/* Finger-sized controls in the Northway editor and library on touch screens only; desktop sizing is unchanged. */
+@media (pointer: coarse) {
+  [data-northway-touch] button:not([data-touch-compact]),
+  [data-northway-touch] select,
+  [data-northway-touch] a[href] { min-height: 40px; min-width: 40px; }
+  [data-northway-touch] input:not([type='checkbox']):not([type='radio']):not([type='color']) { min-height: 40px; }
+  [data-northway-touch] textarea { font-size: 16px; } /* 16px stops iOS zooming into a field */
+  [data-northway-touch] input, [data-northway-touch] select { font-size: 16px; }
+  dialog.modal-overlay button { min-height: 44px; }
+}
