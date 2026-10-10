@@ -1,8 +1,7 @@
 # Northway customisation plan: survey overlays and branded exports
 
-Status: **Stage 2 implemented the Survey Findings layer and Stage 4 the Recommended Works layer**
-(see "Stage 2: what was built" and "Stage 4: what was built" at the end). Legends and branded exports
-are still plans (Stage 5). This note builds on the code map in
+Status: **Stages 2, 4 and 5 implemented the survey overlays, legends and branded exports** (see
+"Stage 2", "Stage 4" and "Stage 5: what was built" at the end). This note builds on the code map in
 [`NORTHWAY_ARCHITECTURE.md`](NORTHWAY_ARCHITECTURE.md).
 
 Goal for later stages:
@@ -282,8 +281,121 @@ model, store, renderer and exporters, and each can be edited, shown and hidden o
   * `schema_version` stays 1: the new fields are optional. `readProject()` fills older zones' name,
     colour and preset from their preset code on load.
 
-Not done in Stage 4 (Stage 5 and later):
+Not done in Stage 4: rotation, polygons and admin preset editing. Legends and exports followed in Stage 5.
 
-* Legend and branded exports, notes in the UI, polygons and rotation, and admin preset editing.
-* Code labels can overlap when a recommendation's top-right corner sits on a finding's top-left code.
-  Stage 5 label placement should avoid this.
+## Stage 5: what was built
+
+### Free-text pins and lines
+
+* **Model** (`src/lib/models/types.ts`):
+  * `Floor.overlayPins?: OverlayPin[]`: `{ id, layer, ref, description, color, x, y }`.
+  * `Floor.overlayLines?: OverlayLine[]`: `{ id, layer, ref, description, color, points[] }`, with two
+    or more points (polylines).
+  * Each item has its own `layer` (`survey-findings` or `recommended-works`). They follow the same
+    Show/Hide toggles as the areas.
+* **UI**: each layer group in the Build tab has **+ Area**, **+ Pin** and **+ Line** (accessible names
+  "Add Finding Pin", "Add Recommendation Line", …).
+  * Pin: click the plan, then `MarkupDialog.svelte` asks for a description (required, up to 500
+    characters) and a colour.
+  * Line: click each point. Double-click, Enter or **Finish** completes it, Backspace removes the last
+    point and Escape cancels. The same dialog then asks for a description and colour.
+  * Properties panel: edit the description and colour, duplicate or delete. The reference is shown
+    as a badge and cannot be edited.
+  * Line geometry: drag a point to reshape the line, or the band to move it. Double-click the line
+    to add a point, or a point to remove it ("Remove last point" also works).
+* **Store** (`overlayStore.ts`): `addPin`, `addLine`, `updateMarkup`, `setPinPosition`,
+  `setLinePoints`, `insertLinePoint`, `removeLinePoint`, `removeMarkup`, `duplicateMarkup`,
+  `placingMarkup`, `pendingMarkup`, `lineDraft` and `finishLineDraft`.
+* **Rendering** (`markupRenderer.ts`), shared by the canvas, every export and print:
+  * findings: a filled **circle** marker, and a solid band with a solid core line;
+  * recommendations: a white **hexagon** marker with a coloured outline, and a lighter band with a
+    **dashed** core line;
+  * only the reference (F2, R3) is drawn on the plan; the description goes in the legend;
+  * lines are drawn above walls (they usually follow one), and markers are drawn last.
+
+### Stable references (`src/lib/northway/references.ts`)
+
+* Every Survey Findings item (area, pin or line) gets F1, F2, …; every Recommended Works item gets
+  R1, R2, …. Numbers are unique across the whole project (all floors).
+* The reference is stored on the item (`ref`). `Project.surveyReferences = { F, R }` keeps the
+  highest number issued, so deleting F2 never renumbers F3, and F2 is never reused.
+* Undo restores whole-project snapshots, so a per-session high-water mark also stops an undone
+  number from being issued again.
+* Moving, editing or retyping an item keeps its reference. Duplicating gives the copy a new one.
+* `normalizeReferences()` runs on every load:
+  * older areas without a reference get one, in floor and item order;
+  * a duplicated reference (the second copy) or one with the wrong letter for its layer gets the
+    next free number;
+  * valid references are never changed.
+* The plan shows the reference: areas show it in their corner, instead of the type code.
+
+### Automatic legend (`src/lib/northway/legend.ts`)
+
+* `buildLegend(floor, layers)` lists only the items on that floor, in numeric reference order
+  (F2 before F10, never alphabetical), split into Survey Findings and Recommended Works.
+* Areas read reference, code, name (`F2  HM  High Moisture`). Pins and lines read reference and
+  description (`F4  Restricted access beneath fitted kitchen`).
+* Each entry has a swatch in the plan's own style (area, circle or hexagon, solid or dashed line).
+* The Build tab shows the same list as "On this plan". Clicking an entry selects the item.
+
+### Survey plan exports (`src/lib/northway/export/`)
+
+* **Export → Survey Plan (PNG / PDF)…** opens `SurveyExportDialog.svelte`. It has:
+  * a floor selector (multi-floor plans export one floor at a time);
+  * the plan type: **Survey Findings Plan**, **Recommended Works Plan** or **Combined Plan**;
+  * the PNG size: **Word report** (17 cm wide) or **A4 page**;
+  * property address, plan/floor name and survey date;
+  * a live preview.
+* The plan type picks the layers for that export only (`viewLayers` passed to `surveyPlanView`). The
+  editor's own Show/Hide settings are never changed.
+* Page layout (`reportLayout.ts`, pure and unit-tested):
+  * header with the logo, title, property address, floor and survey date;
+  * the plan, fitted without distortion (one scale for both axes) and centred;
+  * an approximate scale bar;
+  * the legend, beside or below the plan, whichever draws the plan larger;
+  * the footer "Northway Preservation | Damp & Timber Specialists".
+  * Long legends wrap, use smaller text (down to about 6.5 pt) and more columns, and as a last
+    resort make the page taller. The legend never overlaps the plan.
+  * Word report size: the figure height follows the plan's shape (the shortest frame that still
+    draws the plan within 10% of its largest size).
+* Rendering (`reportExport.ts`):
+  * drawn from the project data with `drawPlanContent()` (shared with scaled print), never a
+    screenshot;
+  * no grid, handles, hover outlines, hidden furniture or unused legend entries;
+  * PNG at 300 dpi on white, with a pHYs resolution tag so Word inserts it at its true size;
+  * PDF: an A4 page from jsPDF holding the same 300 dpi page.
+* File names come from the first line of the address, the floor name and the plan type
+  (`14-Moor-Lane-Ground-Floor-Survey-Findings.png`). They are sanitised, and the customer name is
+  never used.
+* The generic exports (Export 2D as PNG, SVG, PDF and print) now include pins and lines too.
+
+### Metadata
+
+* `Project.surveyDate` ('YYYY-MM-DD') and floor names (`Floor.name`) are edited in the export dialog
+  and saved with the plan (`surveyMeta.ts`).
+* The property address comes from the library row (`cloudDetails` in `cloud/session.ts`) and is
+  changed with Rename in the library. The customer name is not printed on exports.
+
+### Logo
+
+* `static/northway-logo.svg` is the approved logo supplied by Northway (also used on the sign-in
+  page and library). Exports draw it as-is (`export/logo.ts`); it is not redrawn.
+* To change it, replace that file and keep the name. If it ever fails to load, exports show
+  "Northway Preservation" in plain text instead.
+
+### Format
+
+* `CURRENT_SCHEMA_VERSION` is now **2** (`cloud/projectDocument.ts`). Version 1 documents open and
+  get references on load. Version 2 stops an older open tab, which cannot show pins, lines or
+  references, from editing a newer plan.
+
+### Known limitations
+
+* PDFs hold a 300 dpi image of the page, not vector paths and text (jsPDF has no full canvas
+  equivalent). They print sharply, but the text in them is not selectable.
+* A pin or line drawn exactly on a wall makes that spot pick the markup first; select the wall
+  elsewhere along its length.
+* Labels can overlap when markers are placed very close together, or when an area's reference
+  corner sits on another area's reference. Move one of the items slightly.
+* There is no editor to retype a reference by hand (by design: references are stable).
+* Export dialog text is English only.

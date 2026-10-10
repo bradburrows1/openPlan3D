@@ -227,6 +227,15 @@ Stage 3 added private staff sign-in and the Supabase-backed plan library, with s
 [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md) and "Stage 3: what was built" in
 [`NORTHWAY_CUSTOMISATION_PLAN.md`](NORTHWAY_CUSTOMISATION_PLAN.md).
 
+### Stage 5 additions
+
+Stage 5 added free-text pins and lines (`markupRenderer.ts`, `overlayStore.ts`), stable F/R
+references (`references.ts`) and automatic legends (`legend.ts`). It also added the branded Survey
+Findings, Recommended Works and Combined exports in `src/lib/northway/export/`, which reuse
+`drawPlanContent()` from `src/lib/utils/scaledPrint.ts`. The project document format is now
+version 2. See "Stage 5: what was built" in
+[`NORTHWAY_CUSTOMISATION_PLAN.md`](NORTHWAY_CUSTOMISATION_PLAN.md).
+
 ### Stage 4 additions
 
 Stage 4 added the Recommended Works overlay layer and custom findings and recommendations. Presets,
