@@ -4,6 +4,7 @@ import { refreshLegacyFurnitureCategories } from './legacyFurnitureCategories';
 import { validateCustomModelDefinitions } from './customModelDefinitions';
 import { findPreset, isHexColour, UNKNOWN_ZONE_COLOR } from '$lib/northway/zonePresets';
 import { normalizeReferences } from '$lib/northway/references';
+import { PRIORITY_IDS } from '$lib/northway/priorities';
 
 /** Pin and line descriptions appear in full in the legend. */
 const MAX_MARKUP_DESCRIPTION = 500;
@@ -163,6 +164,19 @@ export function readProject(value: unknown): Project {
       if (item.opacity !== undefined) number(item.opacity, `${path}.opacity`, 0, 1);
       booleans(item, ['locked'], path);
     });
+    // Northway Priority fields on Recommended Works items. An item saved before priorities existed is
+    // 'unassigned' (shown grey, "Priority required"); a priority is never inferred from its colour or type.
+    const recommendation = (item: Record<string, any>, path: string) => {
+      if (item.layer !== 'recommended-works') return;
+      defaults(item, { priority: 'unassigned' });
+      choice(item.priority, [...PRIORITY_IDS], `${path}.priority`);
+      if (item.workType !== undefined && item.workType !== null) text(item.workType, `${path}.workType`);
+      if (item.quotedPricePence !== undefined && item.quotedPricePence !== null) {
+        number(item.quotedPricePence, `${path}.quotedPricePence`, 0);
+        if (!Number.isInteger(item.quotedPricePence)) fail(`${path}.quotedPricePence`, 'must be whole pence');
+      }
+      strings(item, ['specification', 'quantity'], path);
+    };
     // Northway overlay layers: optional, so older and upstream files stay unchanged. Zones saved
     // before names and colours were stored take them from their preset.
     for (const [key, layer] of [['surveyFindings', 'survey-findings'], ['recommendedWorks', 'recommended-works']] as const) {
@@ -179,6 +193,7 @@ export function readProject(value: unknown): Project {
         if (!isHexColour(item.color)) fail(`${path}.color`, 'must be a #rrggbb colour');
         number(item.x, `${path}.x`); number(item.y, `${path}.y`);
         positive(item.width, `${path}.width`); positive(item.height, `${path}.height`);
+        recommendation(item, path);
       });
     }
     // Northway free-text pins and lines on either overlay layer.
@@ -188,6 +203,7 @@ export function readProject(value: unknown): Project {
       text(item.description, `${path}.description`);
       if (item.description.length > MAX_MARKUP_DESCRIPTION) fail(`${path}.description`, `must be at most ${MAX_MARKUP_DESCRIPTION} characters`);
       if (!isHexColour(item.color)) fail(`${path}.color`, 'must be a #rrggbb colour');
+      recommendation(item, path);
     };
     if (floor.overlayPins !== undefined) elements('overlayPins', (item, path) => {
       markup(item, path); number(item.x, `${path}.x`); number(item.y, `${path}.y`);

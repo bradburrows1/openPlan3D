@@ -16,9 +16,10 @@ import { readProject } from '$lib/utils/projectValidation';
  * 1: OpenPlan3D web project document with Northway fields (surveyFindings, recommendedWorks, …).
  * 2: adds stable F/R references on every overlay item (Project.surveyReferences), free-text pins
  *    and lines (Floor.overlayPins, Floor.overlayLines) and Project.surveyDate.
+ * 3: adds the Northway Priority to Recommended Works items (priority, workType, quotedPricePence).
  * Bump for a change older versions of the app must not edit, and add a step to migrateDocument().
  */
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 export interface ProjectMetadata {
   project_name: string;
@@ -60,6 +61,8 @@ export function migrateDocument(data: unknown, version: number): unknown {
   // 1 → 2: older overlay areas get references F1…/R1… in floor order. readProject() assigns them
   // (normalizeReferences), so no data rewrite is needed here; the bump stops an older app (an open
   // tab from before Stage 5) from editing a plan whose pins, lines and references it cannot show.
+  // 2 → 3: Recommended Works items without a priority become 'unassigned' (readProject). Nothing is
+  // inferred from their old colour or work type: the surveyor chooses each priority before the final export.
   return data;
 }
 
