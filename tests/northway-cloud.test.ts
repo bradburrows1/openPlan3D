@@ -67,7 +67,9 @@ describe.skipIf(!available)('Northway Plans with Supabase Auth, PostgREST and RL
   it('shows signed-in accounts that are not Northway staff nothing', async () => {
     const outsider = await signedIn(LOCAL_OUTSIDER);
     expect(await listProjects(outsider)).toEqual([]);
-    await expect(createProject(outsider, { project_name: 'Sneaky' }, plan())).rejects.toThrow(/row-level security/);
+    // Staff-facing wording is plain English; the database's refusal is kept as the cause.
+    await expect(createProject(outsider, { project_name: 'Sneaky' }, plan())).rejects.toMatchObject({
+      message: expect.stringMatching(/^Could not create this plan/), cause: { message: expect.stringMatching(/row-level security/) } });
     const brad = await signedIn(LOCAL_STAFF[0]);
     const target = (await listProjects(brad))[0];
     const update = await outsider.from('floor_plan_projects').update({ project_name: 'Hacked' }).eq('id', target.id).select('id');

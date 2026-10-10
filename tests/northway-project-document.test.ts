@@ -53,5 +53,5 @@ it('imports RoomPlan scans and OpenPlan3D files with a suggested name', async ()
   const native = new File([JSON.stringify(roomProject())], 'Regression plan.openplan.json');
   const opened = await projectFromFile(native);
   expect(opened.suggestedName).toBe('Regression plan');
-  await expect(projectFromFile(new File(['not json'], 'broken.json'))).rejects.toThrow(/not valid JSON/);
+  await expect(projectFromFile(new File(['not json'], 'broken.json'))).rejects.toThrow('This floor plan file could not be imported. Check that it is a supported OpenPlan3D or RoomPlan file.');
 });

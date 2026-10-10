@@ -106,8 +106,18 @@
     finally { busy = false; }
   }
 
+  // Delete safety: the confirm button only arms a moment after the dialog opens, so a quick double
+  // tap on an iPad (Delete, then wherever the dialog appears) can never confirm by accident.
+  let deleteArmed = $state(false);
+  let deleteArmTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    clearTimeout(deleteArmTimer);
+    deleteArmed = false;
+    if (deleteTarget) deleteArmTimer = setTimeout(() => { deleteArmed = true; }, 700);
+  });
+
   async function confirmDelete() {
-    if (!deleteTarget || busy) return;
+    if (!deleteTarget || busy || !deleteArmed) return;
     const target = deleteTarget;
     busy = true; listError = null;
     try {
@@ -127,7 +137,7 @@
 
 <svelte:head><title>Northway Plans</title></svelte:head>
 
-<div class="min-h-screen bg-slate-50">
+<div class="min-h-screen bg-slate-50" data-northway-touch>
   <header class="bg-white border-b border-slate-200">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center gap-4">
       <img src="/northway-logo.svg" alt="Northway Preservation" class="h-7" />
@@ -250,7 +260,7 @@
       <p class="text-sm text-slate-600 mt-2">This cannot be undone.</p>
       <div class="flex justify-end gap-2 mt-6">
         <button class="px-3 py-2 text-sm text-slate-600 hover:text-slate-900" onclick={() => deleteTarget = null}>Cancel</button>
-        <button class="px-4 py-2 rounded-lg bg-red-700 text-white text-sm font-semibold hover:bg-red-800 disabled:opacity-60" disabled={busy} onclick={confirmDelete}>{busy ? 'Deleting…' : 'Delete'}</button>
+        <button class="px-4 py-2 rounded-lg bg-red-700 text-white text-sm font-semibold hover:bg-red-800 disabled:opacity-60" disabled={busy || !deleteArmed} onclick={confirmDelete} data-delete-confirm>{busy ? 'Deleting…' : 'Delete'}</button>
       </div>
     </div>
   </dialog>

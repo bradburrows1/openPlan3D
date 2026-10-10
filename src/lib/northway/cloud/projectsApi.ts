@@ -6,6 +6,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Project } from '$lib/models/types';
+import { actionFailureMessage, logFailure } from './errors';
 import { CURRENT_SCHEMA_VERSION, cleanMetadata, projectToDocument, type ProjectMetadata } from './projectDocument';
 
 export const TABLE = 'floor_plan_projects';
@@ -41,8 +42,9 @@ const SUMMARY = 'id, project_name, customer_name, property_address, created_at, 
 
 function fail(error: { message: string; code?: string } | null, action: string): void {
   if (!error) return;
-  // Never echo payloads; PostgREST messages contain no project data.
-  throw new Error(`Could not ${action}: ${error.message}`);
+  // Staff see plain English; the technical detail (never a payload) goes to the console.
+  logFailure(action, error);
+  throw Object.assign(new Error(actionFailureMessage(action, error)), { code: error.code, cause: error });
 }
 
 /** Library listing, most recently updated first. project_data is not downloaded. */
