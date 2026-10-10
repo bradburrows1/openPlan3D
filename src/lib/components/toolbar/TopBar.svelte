@@ -4,6 +4,8 @@
   let { onToggleLayers, layersOpen = false, onToggleHistory, historyOpen = false, cloud = false }: { onToggleLayers?: () => void; layersOpen?: boolean; onToggleHistory?: (trigger: HTMLButtonElement) => void; historyOpen?: boolean; cloud?: boolean } = $props();
   // Northway Plans: in cloud mode Save writes to the project library, not this browser.
   import { cloudSaveState, cloudSaveError, cloudLastSaved, saveCloudProject, saveCloudProjectAsNew } from '$lib/northway/cloud/session';
+  import SurveyExportDialog from '$lib/northway/components/SurveyExportDialog.svelte';
+  let surveyExportOpen = $state(false);
   import { goto } from '$app/navigation';
   import { captureMain3DPNG } from '$lib/utils/captureMain3D';
   import ExportNotice from '$lib/components/ExportNotice.svelte';
@@ -581,10 +583,15 @@
       <span class="max-xl:hidden">{$t('exportMenu.title')}</span>
     </button>
     {#if exportOpen}
-      <div class="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-48 z-50">
+      <div class="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-56 z-50">
         <button class="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left flex items-center gap-2" onclick={() => { exportOpen = false; window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', ctrlKey: true })); }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
           {$t('print.entry')}
+        </button>
+        <!-- Northway: branded survey drawings for reports -->
+        <button class="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left flex items-center gap-2 font-medium" onclick={() => { exportOpen = false; surveyExportOpen = true; }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 8h18"/><path d="M15 8v13"/></svg>
+          Survey Plan (PNG / PDF)…
         </button>
         <div class="h-px bg-gray-100 my-1"></div>
         <button class="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left flex items-center gap-2" onclick={onExport2DPNG}>
@@ -660,6 +667,8 @@
     {$t('saveControls.save')}
   </button>
 </div>
+
+{#if surveyExportOpen}<SurveyExportDialog onclose={() => surveyExportOpen = false} />{/if}
 
 {#if cloud && $cloudSaveError}
   <div role="alert" data-cloud-save-error class="flex flex-wrap items-center gap-3 bg-red-50 border-b border-red-200 px-4 py-3 text-sm text-red-900">
