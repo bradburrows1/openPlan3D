@@ -1,7 +1,8 @@
 import { get, writable } from 'svelte/store';
-import type { Floor, OverlayLayer, OverlayZone } from '$lib/models/types';
+import type { Floor, OverlayLayer, OverlayLine, OverlayPin, OverlayZone, Point } from '$lib/models/types';
 import { currentProject, mutateActiveFloor, newElementId } from '$lib/stores/project';
-import { findPreset, type ZonePreset } from './zonePresets';
+import { ZONE_PALETTE, findPreset, type ZonePreset } from './zonePresets';
+import { issueRef } from './references';
 
 /** What the next drawn zone will be: a preset, or a custom finding/recommendation from the dialog. */
 export interface ZoneTemplate {
@@ -50,6 +51,12 @@ function activeFloor() {
   return project?.floors.find(f => f.id === project.activeFloorId);
 }
 
+/** The next stable reference for a layer, recorded on the open project (call inside a mutation). */
+function nextRef(layer: OverlayLayer): string | undefined {
+  const project = get(currentProject);
+  return project ? issueRef(project, layer) : undefined;
+}
+
 /** Normalise a dragged rectangle (any corner order) to top-left + size. */
 export function normalizeRect(a: { x: number; y: number }, b: { x: number; y: number }): ZoneRect {
   return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) };
@@ -60,7 +67,7 @@ export function addZone(template: ZoneTemplate, rect: ZoneRect): string {
   const id = newElementId();
   const { layer, code, name, color, preset } = template;
   mutateActiveFloor(floor => {
-    layerZones(floor, layer, true)!.push({ id, layer, code, name, color, preset, shape: 'rect', ...rect } as OverlayZone);
+    layerZones(floor, layer, true)!.push({ id, layer, ref: nextRef(layer), code, name, color, preset, shape: 'rect', ...rect } as OverlayZone);
   }, `Added ${NOUN[layer]}`);
   return id;
 }
@@ -99,13 +106,144 @@ export function removeZone(id: string) {
   }, `Deleted ${NOUN[layer]}`);
 }
 
-/** Copy a zone into the same layer, offset down and right so the copy is visible. */
+/** Copy a zone into the same layer with its own new reference, offset down and right so the copy is visible. */
 export function duplicateZone(id: string, offset = 30): string | null {
   const source = findZone(activeFloor(), id);
   if (!source) return null;
   const copy = newElementId();
   mutateActiveFloor(floor => {
-    layerZones(floor, source.layer, true)!.push({ ...structuredClone(source), id: copy, x: source.x + offset, y: source.y + offset });
+    layerZones(floor, source.layer, true)!.push({ ...structuredClone(source), id: copy, ref: nextRef(source.layer), x: source.x + offset, y: source.y + offset });
   }, `Duplicated ${NOUN[source.layer]}`);
   return copy;
+}
+
+// ── Free-text pins and lines ─────────────────────────────────────────
+
+/** What a pin or line is being created with: the layer, then the dialog's description and colour. */
+export interface MarkupDraft { layer: OverlayLayer; description: string; color: string }
+
+/** Pin or line tool armed by + Pin / + Line; geometry is captured on the plan, then the dialog asks for text. */
+export const placingMarkup = writable<{ kind: 'pin' | 'line'; layer: OverlayLayer } | null>(null);
+
+/** Geometry captured on the plan and waiting for its description (the canvas sets it, the dialog consumes it). */
+export const pendingMarkup = writable<{ kind: 'pin'; layer: OverlayLayer; at: Point } | { kind: 'line'; layer: OverlayLayer; points: Point[] } | null>(null);
+
+const MARKUP_NOUN = { 'survey-findings': 'finding', 'recommended-works': 'recommendation' } as const;
+
+export function floorPins(floor: Floor | undefined): OverlayPin[] { return floor?.overlayPins ?? []; }
+export function floorLines(floor: Floor | undefined): OverlayLine[] { return floor?.overlayLines ?? []; }
+
+function findPin(floor: Floor | undefined, id: string) { return floor?.overlayPins?.find(pin => pin.id === id); }
+function findLine(floor: Floor | undefined, id: string) { return floor?.overlayLines?.find(line => line.id === id); }
+
+export function addPin(draft: MarkupDraft, at: Point): string {
+  const id = newElementId();
+  mutateActiveFloor(floor => {
+    (floor.overlayPins ??= []).push({ id, layer: draft.layer, ref: nextRef(draft.layer), description: draft.description, color: draft.color, x: at.x, y: at.y });
+  }, `Added ${MARKUP_NOUN[draft.layer]} pin`);
+  return id;
+}
+
+export function addLine(draft: MarkupDraft, points: Point[]): string {
+  const id = newElementId();
+  mutateActiveFloor(floor => {
+    (floor.overlayLines ??= []).push({ id, layer: draft.layer, ref: nextRef(draft.layer), description: draft.description, color: draft.color, points: points.map(p => ({ x: p.x, y: p.y })) });
+  }, `Added ${MARKUP_NOUN[draft.layer]} line`);
+  return id;
+}
+
+/** Edit a pin's or line's description or colour. The reference never changes. */
+export function updateMarkup(id: string, updates: Partial<Pick<OverlayPin, 'description' | 'color'>>) {
+  mutateActiveFloor(floor => {
+    const item = findPin(floor, id) ?? findLine(floor, id);
+    if (item) Object.assign(item, updates);
+  }, 'Edited markup', `overlay-markup:${id}:${Object.keys(updates).sort().join(',')}`);
+}
+
+/** Move a pin during a drag, without an undo snapshot (the gesture owns it). */
+export function setPinPosition(id: string, at: Point) {
+  const project = get(currentProject);
+  const pin = findPin(project?.floors.find(f => f.id === project.activeFloorId), id);
+  if (!project || !pin) return;
+  pin.x = at.x; pin.y = at.y;
+  project.updatedAt = new Date();
+  currentProject.set({ ...project });
+}
+
+/** Replace a line's points during a drag (move or vertex edit), without an undo snapshot. */
+export function setLinePoints(id: string, points: Point[]) {
+  const project = get(currentProject);
+  const line = findLine(project?.floors.find(f => f.id === project.activeFloorId), id);
+  if (!project || !line) return;
+  line.points = points.map(p => ({ x: p.x, y: p.y }));
+  project.updatedAt = new Date();
+  currentProject.set({ ...project });
+}
+
+/** Remove one point of a polyline (it keeps at least two). */
+export function removeLinePoint(id: string, index: number) {
+  const line = findLine(activeFloor(), id);
+  if (!line || line.points.length <= 2) return;
+  mutateActiveFloor(floor => {
+    const target = findLine(floor, id);
+    if (target) target.points = target.points.filter((_, i) => i !== index);
+  }, 'Removed line point');
+}
+
+/** Insert a point into a polyline after segment index `after`. */
+export function insertLinePoint(id: string, after: number, at: Point) {
+  mutateActiveFloor(floor => {
+    const target = findLine(floor, id);
+    if (target) target.points.splice(after + 1, 0, { x: at.x, y: at.y });
+  }, 'Added line point');
+}
+
+export function removeMarkup(id: string) {
+  mutateActiveFloor(floor => {
+    if (floor.overlayPins) floor.overlayPins = floor.overlayPins.filter(item => item.id !== id);
+    if (floor.overlayLines) floor.overlayLines = floor.overlayLines.filter(item => item.id !== id);
+  }, 'Deleted markup');
+}
+
+/** Copy a pin or line with its own new reference, offset so the copy is visible. */
+export function duplicateMarkup(id: string, offset = 30): string | null {
+  const floor = activeFloor(), pin = findPin(floor, id), line = findLine(floor, id);
+  if (!pin && !line) return null;
+  const copy = newElementId();
+  mutateActiveFloor(target => {
+    if (pin) (target.overlayPins ??= []).push({ ...structuredClone(pin), id: copy, ref: nextRef(pin.layer), x: pin.x + offset, y: pin.y + offset });
+    else if (line) (target.overlayLines ??= []).push({ ...structuredClone(line), id: copy, ref: nextRef(line.layer), points: line.points.map(p => ({ x: p.x + offset, y: p.y + offset })) });
+  }, 'Duplicated markup');
+  return copy;
+}
+
+/** Points clicked so far for a line being drawn (shared by the canvas and the sidebar's Finish button). */
+export const lineDraft = writable<Point[]>([]);
+
+/** Finish the line being drawn: with two or more distinct points it goes to the description dialog. */
+export function finishLineDraft(): boolean {
+  const tool = get(placingMarkup);
+  // A double-click lands its second press on the last point: drop repeated points.
+  const points = get(lineDraft).filter((p, i, all) => i === 0 || Math.hypot(p.x - all[i - 1].x, p.y - all[i - 1].y) >= 1);
+  lineDraft.set([]);
+  if (!tool || tool.kind !== 'line') return false;
+  placingMarkup.set(null);
+  if (points.length < 2) return false;
+  pendingMarkup.set({ kind: 'line', layer: tool.layer, points });
+  return true;
+}
+
+export function cancelMarkupTool() {
+  lineDraft.set([]);
+  placingMarkup.set(null);
+}
+
+/** A palette colour not yet used on this layer of the floor (areas, pins and lines), for a new custom item. */
+export function freshLayerColour(floor: Floor | undefined, layer: OverlayLayer): string {
+  const used = new Set([
+    ...floorZones(floor).filter(zone => zone.layer === layer).map(zone => zone.color),
+    ...floorPins(floor).filter(pin => pin.layer === layer).map(pin => pin.color),
+    ...floorLines(floor).filter(line => line.layer === layer).map(line => line.color),
+  ].map(color => color?.toLowerCase()));
+  return (ZONE_PALETTE.find(colour => !used.has(colour.hex.toLowerCase())) ?? ZONE_PALETTE[0]).hex;
 }

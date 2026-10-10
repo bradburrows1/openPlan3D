@@ -14,6 +14,7 @@
   import PropertiesPanel from '$lib/components/sidebar/PropertiesPanel.svelte';
   import LayersPanel from '$lib/components/sidebar/LayersPanel.svelte';
   import FloorPlanCanvas from '$lib/components/editor/FloorPlanCanvas.svelte';
+  import MarkupDialog from '$lib/northway/components/MarkupDialog.svelte';
   import AlignmentToolbar from '$lib/components/editor/AlignmentToolbar.svelte';
   import UndoHistoryPanel from '$lib/components/editor/UndoHistoryPanel.svelte';
   import CommandPalette from '$lib/components/editor/CommandPalette.svelte';
@@ -111,6 +112,7 @@
       <div class="flex-1 min-w-0 relative">
         {#if mode === '2d'}
           <FloorPlanCanvas />
+          <MarkupDialog />
           <AlignmentToolbar />
           {#if $elevationWallId}
             <!-- Integrated elevation view replaces the plan canvas area (sidebars stay) -->

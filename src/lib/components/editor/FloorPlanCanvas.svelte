@@ -29,7 +29,8 @@
   import { getWallTextureCanvas, getFloorTextureCanvas, setTextureLoadCallback } from '$lib/utils/textureGenerator';
   import { projectSettings, formatLength, formatArea } from '$lib/stores/settings';
   import { planFurniture } from '$lib/northway/fixtures';
-  import { addZone, setZoneRect, placingZone, normalizeRect, MIN_ZONE_SIZE, type ZoneRect, type ZoneTemplate } from '$lib/northway/overlayStore';
+  import { addZone, setZoneRect, placingZone, normalizeRect, MIN_ZONE_SIZE, type ZoneRect, type ZoneTemplate, placingMarkup, pendingMarkup, lineDraft, finishLineDraft, cancelMarkupTool, setPinPosition, setLinePoints, insertLinePoint, removeLinePoint } from '$lib/northway/overlayStore';
+  import { drawMarkupLines, drawMarkupMarkers, drawMarkupSelection, drawLineDraft, findMarkupAt, findLineVertexAt, findLineSegmentAt, markerRadius } from '$lib/northway/markupRenderer';
   import { drawZoneAreas, drawZoneCodes, drawZoneSelection, drawZoneDraft, zonesAt, pickZoneAt, findZoneHandleAt, resizeZoneRect, zoneHandlePoint, zoneCursor, type ZoneHandle } from '$lib/northway/overlayRenderer';
   import { isTechnicalStyle } from '$lib/utils/planStyle';
   import type { ProjectSettings } from '$lib/stores/settings';
@@ -231,7 +232,22 @@
   let selectedZone = $derived.by(() => overlayZones.find(zone => zone.id === currentSelectedId) ?? null);
   /** A press on the already-selected zone where others overlap: a click without dragging selects the next one. */
   let zoneCyclePoint: Point | null = null;
-  $effect(() => { if (currentTool !== 'select') placingZone.set(null); });
+  $effect(() => { if (currentTool !== 'select') { placingZone.set(null); cancelMarkupTool(); } });
+  // Northway: free-text pins and lines (+ Pin / + Line). Geometry is captured here; the
+  // description dialog (MarkupDialog) then creates the item.
+  let markupTool: { kind: 'pin' | 'line'; layer: 'survey-findings' | 'recommended-works' } | null = $state(null);
+  onDestroy(placingMarkup.subscribe((tool) => { markupTool = tool; markDirty(); }));
+  let lineDraftPoints: Point[] = $state([]);
+  onDestroy(lineDraft.subscribe((points) => { lineDraftPoints = points; markDirty(); }));
+  const layerShown = (layer: string) => layer === 'survey-findings' ? dimSettings.showSurveyFindings !== false : dimSettings.showRecommendedWorks !== false;
+  let overlayPins = $derived.by(() => (currentFloor?.overlayPins ?? []).filter(pin => layerShown(pin.layer)));
+  let overlayLines = $derived.by(() => (currentFloor?.overlayLines ?? []).filter(line => layerShown(line.layer)));
+  let selectedMarkup = $derived.by(() => overlayPins.find(pin => pin.id === currentSelectedId) ?? overlayLines.find(line => line.id === currentSelectedId) ?? null);
+  let draggingPin: { id: string; start: Point; press: Point } | null = $state(null);
+  /** vertex -1 moves the whole line; otherwise one point. */
+  let draggingLine: { id: string; start: Point[]; vertex: number; press: Point } | null = $state(null);
+  const markupRadius = (label: string) => markerRadius(getCS().ctx, label);
+  function lineMoveActive() { return !!draggingLine && draggingLine.vertex < 0; }
   function zoneResizeCursor() { return resizingZone ? zoneCursor(resizingZone.handle) : 'default'; }
   let draggingStairId: string | null = $state(null);
   let stairDragOffset: Point = { x: 0, y: 0 };
@@ -1245,7 +1261,8 @@
     }
 
     // Entourage (2D presentation symbols) — under furniture
-    // Northway: issue codes stay readable above walls and openings.
+    // Northway: markup lines lie over walls (they often follow one); area references stay readable above them.
+    if (overlayLines.length) drawMarkupLines(getCS(), overlayLines);
     if (overlayZones.length) drawZoneCodes(getCS(), overlayZones);
 
     if (layerVis.entourage) {
@@ -1261,6 +1278,9 @@
       }
     }
 
+    if (overlayPins.length || overlayLines.length) drawMarkupMarkers(getCS(), overlayPins, overlayLines);
+    if (selectedMarkup) drawMarkupSelection(getCS(), selectedMarkup);
+    if (markupTool?.kind === 'line' && lineDraftPoints.length) drawLineDraft(getCS(), markupTool.layer, '#475569', lineDraftPoints, { x: snap(mousePos.x), y: snap(mousePos.y) });
     if (selectedZone) drawZoneSelection(getCS(), selectedZone);
     if (drawingZone && placingZoneTemplate) drawZoneDraft(getCS(), placingZoneTemplate, normalizeRect(drawingZone.start, drawingZone.end));
 
@@ -2363,6 +2383,17 @@
       return;
     }
 
+    // Northway: + Pin places at the click and asks for a description; + Line adds a point per click
+    // (double-click, Enter or Finish completes it).
+    if (markupTool) {
+      const at = { x: snap(wp.x), y: snap(wp.y) };
+      if (markupTool.kind === 'pin') {
+        pendingMarkup.set({ kind: 'pin', layer: markupTool.layer, at });
+        placingMarkup.set(null);
+      } else lineDraft.update(points => [...points, at]);
+      return;
+    }
+
     // Northway: Add Issue Area / Add Recommended Area / Draw Area. The press starts the rectangle; release creates it.
     if (placingZoneTemplate) {
       const start = { x: snap(wp.x), y: snap(wp.y) };
@@ -2561,6 +2592,27 @@
           return;
         }
       }
+      // Northway: pins and lines are drawn on top of the plan, so they are picked first. A selected
+      // line's vertices can be dragged; its band or marker moves the whole line.
+      if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        if (selectedMarkup && 'points' in selectedMarkup) {
+          const vertex = findLineVertexAt(wp, selectedMarkup, zoom);
+          if (vertex >= 0) {
+            draggingLine = { id: selectedMarkup.id, start: selectedMarkup.points.map(p => ({ ...p })), vertex, press: { x: e.clientX, y: e.clientY } };
+            return;
+          }
+        }
+        const markup = findMarkupAt(wp, overlayPins, overlayLines, zoom, markupRadius);
+        if (markup) {
+          clearAuxiliarySelection();
+          selectedRoomId.set(null);
+          selectedElementIds.set(new Set());
+          selectedElementId.set(markup.id);
+          if ('points' in markup) draggingLine = { id: markup.id, start: markup.points.map(p => ({ ...p })), vertex: -1, press: { x: e.clientX, y: e.clientY } };
+          else draggingPin = { id: markup.id, start: { x: markup.x, y: markup.y }, press: { x: e.clientX, y: e.clientY } };
+          return;
+        }
+      }
       // Northway: resize handles of the selected overlay zone
       zoneCyclePoint = null;
       if (!e.ctrlKey && !e.metaKey && selectedZone) {
@@ -2727,6 +2779,17 @@
     const selectionPoint = e.detail >= 2 && sameSelectionPress(e) ? selectionPress!.world : screenToWorld(sx, sy);
     selectionPress = null;
 
+    // Northway: a double-click finishes a line being drawn. On a selected line it removes the
+    // vertex under the pointer, or adds one on the segment under it.
+    if (markupTool?.kind === 'line') { finishLineDraft(); return; }
+    if (currentTool === 'select' && selectedMarkup && 'points' in selectedMarkup) {
+      const wp = screenToWorld(sx, sy);
+      const vertex = findLineVertexAt(wp, selectedMarkup, zoom);
+      if (vertex >= 0) { removeLinePoint(selectedMarkup.id, vertex); return; }
+      const segment = findLineSegmentAt(wp, selectedMarkup, zoom);
+      if (segment >= 0) { insertLinePoint(selectedMarkup.id, segment, { x: snap(wp.x), y: snap(wp.y) }); return; }
+    }
+
     // Double-click on horizontal ruler → add horizontal guide
     if (sy < R && sx > R) {
       const wp = screenToWorld(sx, sy);
@@ -2820,7 +2883,7 @@
 
     if ((draggingWallEndpoint || draggingWallParallel || draggingCurveHandle || draggingRoomId
       || draggingStairId || draggingColumnId || draggingTextAnnotationId || draggingMultiSelect
-      || draggingDoorId || draggingWindowId || draggingGuideId || draggingEntourageId || resizingEntourageId || draggingZone || resizingZone) && !geometryGestureStarted) {
+      || draggingDoorId || draggingWindowId || draggingGuideId || draggingEntourageId || resizingEntourageId || draggingZone || resizingZone || draggingPin || draggingLine) && !geometryGestureStarted) {
       if (Math.hypot(e.clientX - canvasPressPosition.x, e.clientY - canvasPressPosition.y) < 3) return;
       beginUndoGroup();
       geometryGestureStarted = true;
@@ -3011,6 +3074,15 @@
     if (draggingZone) {
       const { start, press } = draggingZone;
       setZoneRect(draggingZone.id, { ...start, x: snap(start.x + (e.clientX - press.x) / zoom), y: snap(start.y + (e.clientY - press.y) / zoom) });
+    }
+    if (draggingPin && geometryGestureStarted) {
+      const { start, press } = draggingPin;
+      setPinPosition(draggingPin.id, { x: snap(start.x + (e.clientX - press.x) / zoom), y: snap(start.y + (e.clientY - press.y) / zoom) });
+    }
+    if (draggingLine && geometryGestureStarted) {
+      const { start, press, vertex } = draggingLine, anchor = start[Math.max(0, vertex)];
+      const dx = snap(anchor.x + (e.clientX - press.x) / zoom) - anchor.x, dy = snap(anchor.y + (e.clientY - press.y) / zoom) - anchor.y;
+      setLinePoints(draggingLine.id, start.map((p, i) => vertex < 0 || i === vertex ? { x: p.x + dx, y: p.y + dy } : p));
     }
     if (resizingZone) {
       const { start, press, handle } = resizingZone, origin = zoneHandlePoint(start, handle);
@@ -3226,11 +3298,14 @@
     zoneCyclePoint = null;
     if (geometryGestureStarted) {
       const zoneNoun = (draggingZone ?? resizingZone) && overlayZones.find(zone => zone.id === (draggingZone ?? resizingZone)!.id)?.layer === 'recommended-works' ? 'recommended area' : 'issue area';
-      endUndoGroup(resizingZone ? `Resized ${zoneNoun}` : draggingZone ? `Moved ${zoneNoun}` : 'Moved plan geometry');
+      endUndoGroup(resizingZone ? `Resized ${zoneNoun}` : draggingZone ? `Moved ${zoneNoun}` : draggingPin ? 'Moved pin'
+        : draggingLine ? (draggingLine.vertex < 0 ? 'Moved line' : 'Moved line point') : 'Moved plan geometry');
       geometryGestureStarted = false;
     }
     draggingZone = null;
     resizingZone = null;
+    draggingPin = null;
+    draggingLine = null;
     draggingTextAnnotationId = null;
     draggingRoomId = null;
     roomDragStartPositions.clear();
@@ -3467,6 +3542,12 @@
     shiftDown = e.shiftKey;
     if (e.code === 'Space') { spaceDown = true; e.preventDefault(); return; }
 
+    // Northway: while drawing a line, Enter finishes it and Backspace removes the last point.
+    if (markupTool?.kind === 'line' && !e.metaKey && !e.ctrlKey) {
+      if (e.key === 'Enter') { finishLineDraft(); e.preventDefault(); return; }
+      if (e.key === 'Backspace' && lineDraftPoints.length) { lineDraft.update(points => points.slice(0, -1)); e.preventDefault(); return; }
+    }
+
     // Exact-length entry while drawing a wall (issue #6):
     // type a number, then Enter places the wall at exactly that length.
     if (currentTool === 'wall' && wallStart && !editingTextAnnotationId && !e.metaKey && !e.ctrlKey) {
@@ -3547,6 +3628,7 @@
       placingEntourageId.set(null);
       placingZone.set(null);
       drawingZone = null;
+      cancelMarkupTool();
       placingRotation.set(0);
       editingTextAnnotationId = null;
       textAnnotationMode = false;
@@ -4005,8 +4087,8 @@
   let cursorStyle = $derived(
     spaceDown || isPanning || $panMode || (shiftDown && currentTool === 'select') ? 'grab' :
     pickingElevation ? 'crosshair' :
-    drawingZone || placingZoneTemplate ? 'crosshair' :
-    draggingZone ? 'move' :
+    drawingZone || placingZoneTemplate || markupTool ? 'crosshair' :
+    draggingZone || draggingPin || lineMoveActive() ? 'move' :
     resizingZone ? zoneResizeCursor() :
     draggingFurnitureId ? 'move' :
     draggingRoomId ? 'move' :

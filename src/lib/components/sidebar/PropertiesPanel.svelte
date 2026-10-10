@@ -21,7 +21,8 @@
   import { projectSettings, formatLength, formatArea, parseLengthInput } from '$lib/stores/settings';
   import { isTechnicalStyle } from '$lib/utils/planStyle';
   import { cleanCode, presetsFor, zoneAppearance } from '$lib/northway/zonePresets';
-  import { applyZonePreset, duplicateZone, floorZones, removeZone, updateZone } from '$lib/northway/overlayStore';
+  import { applyZonePreset, duplicateZone, floorZones, removeZone, updateZone, duplicateMarkup, removeMarkup, updateMarkup, removeLinePoint } from '$lib/northway/overlayStore';
+  import MarkupSwatch from '$lib/northway/components/MarkupSwatch.svelte';
   import ZoneSwatch from '$lib/northway/components/ZoneSwatch.svelte';
   import ZoneColourPicker from '$lib/northway/components/ZoneColourPicker.svelte';
     import type { Floor, Wall, Door, Window as Win, Room, FurnitureItem, Stair, Column, RoomCategory, TextAnnotation } from '$lib/models/types';
@@ -61,8 +62,9 @@
   let selectedTextAnnotation = $derived(floor?.textAnnotations?.find(t => t.id === selId) ?? null);
   let selectedEntourage = $derived(floor?.entourage?.find(en => en.id === selId) ?? null);
   // Northway: a selected Survey Findings issue area (only while the layer is shown).
-  let selectedZone = $derived(floorZones(floor ?? undefined).find(zone => zone.id === selId
-    && (zone.layer === 'survey-findings' ? settings.showSurveyFindings !== false : settings.showRecommendedWorks !== false)) ?? null);
+  const overlayLayerShown = (layer: string) => layer === 'survey-findings' ? settings.showSurveyFindings !== false : settings.showRecommendedWorks !== false;
+  let selectedZone = $derived(floorZones(floor ?? undefined).find(zone => zone.id === selId && overlayLayerShown(zone.layer)) ?? null);
+  let selectedMarkup = $derived([...floor?.overlayPins ?? [], ...floor?.overlayLines ?? []].find(item => item.id === selId && overlayLayerShown(item.layer)) ?? null);
   let hasBgImage = $derived(!!floor?.backgroundImage);
   let selectedRoom = $derived(floor && selRoomId
     ? resolveRooms(floor, detectedRooms).find(r => r.id === selRoomId) ?? null
@@ -368,7 +370,7 @@
     { label: '🧶 Carpet', ids: ['carpet-beige', 'carpet-gray'] },
   ];
 
-  let hasSelection = $derived(!!selectedWall || !!selectedDoor || !!selectedWindow || !!selectedFurniture || !!selectedRoom || !!selectedStair || !!selectedColumn || !!selectedTextAnnotation || !!selectedEntourage || !!selectedZone || (!is3D && hasBgImage));
+  let hasSelection = $derived(!!selectedWall || !!selectedDoor || !!selectedWindow || !!selectedFurniture || !!selectedRoom || !!selectedStair || !!selectedColumn || !!selectedTextAnnotation || !!selectedEntourage || !!selectedZone || !!selectedMarkup || (!is3D && hasBgImage));
 </script>
 
 <!-- Right sidebar on md+; slides up as a bottom sheet on phones -->
@@ -881,6 +883,7 @@
     <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
       <ZoneSwatch layer={zone.layer} color={look.color} />
       {findingZone ? $t('northway.issueArea') : $t('northway.recommendedArea')}
+      {#if zone.ref}<span class="ml-auto px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 text-xs font-bold" title={$t('northway.referenceHelp')} data-reference-badge>{zone.ref}</span>{/if}
     </h3>
     <div class="space-y-3" data-issue-area-properties={findingZone ? '' : undefined} data-recommended-area-properties={findingZone ? undefined : ''}>
       <label class="block">
@@ -927,6 +930,41 @@
       <div class="flex gap-2">
         <button onclick={() => { const copy = duplicateZone(zone.id); if (copy) selectedElementId.set(copy); }} class="flex-1 px-2 py-1.5 border border-gray-200 rounded text-sm hover:bg-gray-50 transition-colors">{$t('northway.duplicate')}</button>
         <button onclick={() => { removeZone(zone.id); selectedElementId.set(null); }} class="flex-1 px-2 py-1.5 border border-red-200 text-red-600 rounded text-sm hover:bg-red-50 transition-colors">{$t('northway.delete')}</button>
+      </div>
+    </div>
+
+  {:else if selectedMarkup}
+    {@const item = selectedMarkup}
+    {@const isLine = 'points' in item}
+    {@const findingItem = item.layer === 'survey-findings'}
+    <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+      <MarkupSwatch kind={isLine ? 'line' : 'pin'} layer={item.layer} color={item.color} />
+      {isLine ? (findingItem ? $t('northway.findingLine') : $t('northway.recommendationLine')) : (findingItem ? $t('northway.findingPin') : $t('northway.recommendationPin'))}
+      {#if item.ref}<span class="ml-auto px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 text-xs font-bold" title={$t('northway.referenceHelp')} data-reference-badge>{item.ref}</span>{/if}
+    </h3>
+    <div class="space-y-3" data-markup-properties>
+      <label class="block">
+        <span class="text-xs text-gray-500">{$t('northway.markupDescription')}</span>
+        <textarea rows="3" maxlength="500" class="w-full px-2 py-1 border border-gray-200 rounded text-sm resize-y" value={item.description}
+          oninput={(e) => { const value = (e.target as HTMLTextAreaElement).value; if (value.trim()) updateMarkup(item.id, { description: value }); }}
+          onblur={(e) => { const input = e.target as HTMLTextAreaElement; if (!input.value.trim()) input.value = item.description; else if (input.value !== input.value.trim()) updateMarkup(item.id, { description: input.value.trim() }); }}></textarea>
+      </label>
+      <div>
+        <span class="block text-xs text-gray-500 mb-1.5">{$t('northway.zoneColour')}</span>
+        <ZoneColourPicker value={item.color} onchange={(color) => updateMarkup(item.id, { color })} />
+      </div>
+      {#if isLine}
+        <div class="text-xs text-gray-500 space-y-1">
+          <p>{$t('northway.linePoints', { count: item.points.length })}</p>
+          <p class="text-gray-400">{$t('northway.lineEditHelp')}</p>
+          {#if item.points.length > 2}
+            <button class="px-2 py-1 border border-gray-200 rounded text-xs hover:bg-gray-50" onclick={() => removeLinePoint(item.id, item.points.length - 1)}>{$t('northway.removeLastPoint')}</button>
+          {/if}
+        </div>
+      {/if}
+      <div class="flex gap-2">
+        <button onclick={() => { const copy = duplicateMarkup(item.id); if (copy) selectedElementId.set(copy); }} class="flex-1 px-2 py-1.5 border border-gray-200 rounded text-sm hover:bg-gray-50 transition-colors">{$t('northway.duplicate')}</button>
+        <button onclick={() => { removeMarkup(item.id); selectedElementId.set(null); }} class="flex-1 px-2 py-1.5 border border-red-200 text-red-600 rounded text-sm hover:bg-red-50 transition-colors">{$t('northway.delete')}</button>
       </div>
     </div>
 

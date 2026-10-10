@@ -1,14 +1,18 @@
 <script lang="ts">
   /**
-   * One overlay layer in the Build panel: Add Issue Area / Add Recommended Area with its
-   * presets, + Custom Finding / + Custom Recommendation, and the layer's own Show/Hide.
+   * One overlay layer in the Build panel:
+   *   + Area  presets or a custom finding/recommendation (Stage 4)
+   *   + Pin   a free-text point marker
+   *   + Line  a free-text line or polyline
+   * and the layer's own Show/Hide.
    */
   import type { OverlayLayer } from '$lib/models/types';
   import { t } from '$lib/i18n';
   import { currentProject, placingFurnitureId, selectedElementId, selectedElementIds, selectedTool } from '$lib/stores/project';
   import { projectSettings } from '$lib/stores/settings';
-  import { placingZone, presetTemplate, floorZones, type ZoneTemplate } from '../overlayStore';
-  import { ZONE_PALETTE, presetsFor } from '../zonePresets';
+  import { placingZone, presetTemplate, freshLayerColour, placingMarkup, lineDraft, finishLineDraft, cancelMarkupTool, type ZoneTemplate } from '../overlayStore';
+  import { floorItems } from '../references';
+  import { presetsFor } from '../zonePresets';
   import ZoneSwatch from './ZoneSwatch.svelte';
   import ZoneTemplateDialog from './ZoneTemplateDialog.svelte';
 
@@ -17,8 +21,8 @@
   const findings = $derived(layer === 'survey-findings');
   const settingKey = $derived(findings ? 'showSurveyFindings' : 'showRecommendedWorks');
   const text = $derived(findings
-    ? { title: $t('northway.surveyFindings'), add: $t('northway.addIssueArea'), help: $t('northway.addIssueAreaHelp'), custom: $t('northway.customFinding'), show: $t('northway.showSurveyFindings'), hide: $t('northway.hideSurveyFindings') }
-    : { title: $t('northway.recommendedWorks'), add: $t('northway.addRecommendedArea'), help: $t('northway.addRecommendedAreaHelp'), custom: $t('northway.customRecommendation'), show: $t('northway.showRecommendedWorks'), hide: $t('northway.hideRecommendedWorks') });
+    ? { title: $t('northway.surveyFindings'), add: $t('northway.addIssueArea'), help: $t('northway.addIssueAreaHelp'), custom: $t('northway.customFinding'), show: $t('northway.showSurveyFindings'), hide: $t('northway.hideSurveyFindings'), pin: $t('northway.addFindingPin'), line: $t('northway.addFindingLine') }
+    : { title: $t('northway.recommendedWorks'), add: $t('northway.addRecommendedArea'), help: $t('northway.addRecommendedAreaHelp'), custom: $t('northway.customRecommendation'), show: $t('northway.showRecommendedWorks'), hide: $t('northway.hideRecommendedWorks'), pin: $t('northway.addRecommendationPin'), line: $t('northway.addRecommendationLine') });
   // Stage 2 test hooks for the findings group are kept; recommendations get their own.
   const hooks = $derived(findings
     ? { group: { 'data-survey-findings': '' }, presets: { 'data-issue-presets': '' }, toggle: { 'data-survey-findings-toggle': '' } }
@@ -28,11 +32,17 @@
   let dialogOpen = $state(false);
   let visible = $derived($projectSettings[settingKey] !== false);
   let armed = $derived($placingZone?.layer === layer ? $placingZone : null);
+  let markupArmed = $derived($placingMarkup?.layer === layer ? $placingMarkup.kind : null);
 
-  function arm(template: ZoneTemplate) {
+  function prepare() {
     selectedTool.set('select');
     placingFurnitureId.set(null);
     if (!visible) projectSettings.update(settings => ({ ...settings, [settingKey]: true }));
+  }
+
+  function arm(template: ZoneTemplate) {
+    prepare();
+    cancelMarkupTool();
     placingZone.set(template);
   }
 
@@ -41,44 +51,77 @@
     else arm(template);
   }
 
-  /** A custom zone starts with a palette colour not yet used in this layer on the current floor. */
-  function freshColour(): string {
-    const floor = $currentProject?.floors.find(f => f.id === $currentProject?.activeFloorId);
-    const used = new Set(floorZones(floor).filter(zone => zone.layer === layer).map(zone => zone.color?.toLowerCase()));
-    return (ZONE_PALETTE.find(colour => !used.has(colour.hex.toLowerCase())) ?? ZONE_PALETTE[0]).hex;
+  function toggleArea() {
+    pickerOpen = !pickerOpen;
+    if (pickerOpen) cancelMarkupTool();
+    else if (armed) placingZone.set(null);
+  }
+
+  function toggleMarkup(kind: 'pin' | 'line') {
+    if (markupArmed === kind) { cancelMarkupTool(); return; }
+    prepare();
+    placingZone.set(null);
+    pickerOpen = false;
+    lineDraft.set([]);
+    placingMarkup.set({ kind, layer });
+  }
+
+  function activeFloor() {
+    const project = $currentProject;
+    return project?.floors.find(f => f.id === project.activeFloorId);
   }
 
   function toggleVisible() {
     if (visible) {
-      // Hidden zones must not stay selected, or Delete would remove something unseen.
-      const ids = new Set(($currentProject?.floors ?? []).flatMap(floor => floorZones(floor)).filter(zone => zone.layer === layer).map(zone => zone.id));
+      // Hidden items must not stay selected, or Delete would remove something unseen.
+      const ids = new Set(($currentProject?.floors ?? []).flatMap(floor => floorItems(floor)).filter(item => item.layer === layer).map(item => item.id));
       if (armed) placingZone.set(null);
+      if (markupArmed) cancelMarkupTool();
       if (ids.has($selectedElementId ?? '')) selectedElementId.set(null);
       selectedElementIds.update(current => new Set([...current].filter(id => !ids.has(id))));
     }
     projectSettings.update(settings => ({ ...settings, [settingKey]: !visible }));
   }
+
+  const toolClass = (on: boolean) => `flex-1 min-w-0 flex items-center justify-center gap-1 px-1.5 py-2 rounded-lg text-xs font-medium transition-colors ${on ? 'bg-blue-50 text-slate-800 ring-1 ring-blue-200' : 'bg-gray-50 hover:bg-gray-100 text-gray-700'}`;
 </script>
 
 <h3 class="text-xs font-semibold text-gray-400 uppercase mb-2 mt-3">{text.title}</h3>
 <div class="space-y-1" {...hooks.group} role="group" aria-label={text.title}>
-  <button
-    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors {pickerOpen || armed ? 'bg-blue-50 text-slate-800 ring-1 ring-blue-200' : 'hover:bg-gray-50 text-gray-700'}"
-    aria-expanded={pickerOpen}
-    onclick={() => { pickerOpen = !pickerOpen; if (!pickerOpen && armed) placingZone.set(null); }}
-  >
-    <div class="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center">
-      {#if findings}
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="16" height="12" rx="1" stroke-dasharray="3 2"/><line x1="12" y1="9" x2="12" y2="15"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
-      {:else}
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="16" height="12" rx="1"/><line x1="8" y1="18" x2="16" y2="6" stroke-width="1.25"/><line x1="4" y1="14" x2="9" y2="6" stroke-width="1.25"/><line x1="13" y1="18" x2="20" y2="9" stroke-width="1.25"/></svg>
-      {/if}
+  <div class="flex gap-1.5">
+    <button class={toolClass(pickerOpen || !!armed)} aria-expanded={pickerOpen} aria-label={text.add} title={text.help} onclick={toggleArea}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        {#if findings}<rect x="4" y="6" width="16" height="12" rx="1"/>{:else}<rect x="4" y="6" width="16" height="12" rx="1" stroke-dasharray="3 2"/>{/if}
+      </svg>
+      <span class="whitespace-nowrap">+ {$t('northway.area')}</span>
+    </button>
+    <button class={toolClass(markupArmed === 'pin')} aria-pressed={markupArmed === 'pin'} aria-label={text.pin} title={text.pin} onclick={() => toggleMarkup('pin')}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        {#if findings}<circle cx="12" cy="12" r="7"/>{:else}<polygon points="12,4 19,8 19,16 12,20 5,16 5,8"/>{/if}
+      </svg>
+      <span class="whitespace-nowrap">+ {$t('northway.pin')}</span>
+    </button>
+    <button class={toolClass(markupArmed === 'line')} aria-pressed={markupArmed === 'line'} aria-label={text.line} title={text.line} onclick={() => toggleMarkup('line')}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+        <polyline points="4,18 10,10 20,8" stroke-dasharray={findings ? undefined : '4 3'}/>
+      </svg>
+      <span class="whitespace-nowrap">+ {$t('northway.line')}</span>
+    </button>
+  </div>
+
+  {#if markupArmed === 'pin'}
+    <p class="px-1 py-1 text-xs text-gray-500" data-markup-hint>{$t('northway.pinHint')}</p>
+  {:else if markupArmed === 'line'}
+    <div class="px-1 py-1 space-y-1.5" data-markup-hint>
+      <p class="text-xs text-gray-500">{$t('northway.lineHint')}</p>
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-gray-400 flex-1">{$t('northway.linePoints', { count: $lineDraft.length })}</span>
+        <button class="px-2.5 py-1 text-xs rounded border border-gray-200 hover:bg-gray-50" onclick={cancelMarkupTool}>{$t('northway.cancel')}</button>
+        <button class="px-2.5 py-1 text-xs rounded bg-[#083335] text-white font-semibold disabled:opacity-50" disabled={$lineDraft.length < 2} onclick={() => finishLineDraft()}>{$t('northway.finishLine')}</button>
+      </div>
     </div>
-    <div class="text-left">
-      <div class="font-medium">{text.add}</div>
-      <div class="text-xs text-gray-400">{text.help}</div>
-    </div>
-  </button>
+  {/if}
+
   {#if pickerOpen}
     <div class="grid grid-cols-1 gap-1 pl-2" {...hooks.presets}>
       {#each presetsFor(layer) as preset (preset.code)}
@@ -119,6 +162,6 @@
 </div>
 
 {#if dialogOpen}
-  <ZoneTemplateDialog {layer} initialColor={freshColour()} onclose={() => dialogOpen = false}
+  <ZoneTemplateDialog {layer} initialColor={freshLayerColour(activeFloor(), layer)} onclose={() => dialogOpen = false}
     ondraw={(template) => { dialogOpen = false; arm(template); }} />
 {/if}
