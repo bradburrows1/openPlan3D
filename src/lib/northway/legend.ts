@@ -6,10 +6,12 @@
  *   F2  HM  High Moisture            (area from a preset: reference, type code, name)
  *   F3  DP  Defective Pointing       (custom area)
  *   F4      Restricted access …      (pin or line: reference and description)
+ *   R1  3   Replace decayed joists   (recommendation: reference, Northway Priority, recommendation)
  */
 import type { Floor, OverlayLayer } from '$lib/models/types';
 import { refNumber } from './references';
 import { zoneAppearance } from './zonePresets';
+import { itemColor, itemPriority, priorityStyle, type NorthwayPriority } from './priorities';
 import type { LayerSelection } from './planView';
 
 export type LegendKind = 'area' | 'pin' | 'line';
@@ -21,9 +23,12 @@ export interface LegendEntry {
   kind: LegendKind;
   /** Type code for areas (HM, WT, or a custom code); pins and lines have none. */
   code?: string;
-  /** Area name or pin/line description. */
+  /** Area name or pin/line description (the recommendation, for Recommended Works). */
   text: string;
   color: string;
+  /** Recommended Works only: the Northway Priority, and the optional work type as secondary information. */
+  priority?: NorthwayPriority;
+  workType?: string | null;
 }
 
 export const LEGEND_LAYERS: readonly OverlayLayer[] = ['survey-findings', 'recommended-works'];
@@ -34,12 +39,16 @@ export function buildLegend(
 ): Record<OverlayLayer, LegendEntry[]> {
   const entries: LegendEntry[] = [];
   if (floor) {
-    for (const zone of [...floor.surveyFindings ?? [], ...floor.recommendedWorks ?? []]) {
+    const recommendation = (item: { layer: OverlayLayer; priority?: unknown; workType?: string | null }) =>
+      item.layer === 'recommended-works' ? { priority: itemPriority(item)!, workType: item.workType ?? null } : {};
+    for (const zone of floor.surveyFindings ?? []) {
       const look = zoneAppearance(zone);
       entries.push({ id: zone.id, ref: zone.ref ?? '', layer: zone.layer, kind: 'area', code: zone.code, text: look.name, color: look.color });
     }
-    for (const pin of floor.overlayPins ?? []) entries.push({ id: pin.id, ref: pin.ref ?? '', layer: pin.layer, kind: 'pin', text: pin.description, color: pin.color });
-    for (const line of floor.overlayLines ?? []) entries.push({ id: line.id, ref: line.ref ?? '', layer: line.layer, kind: 'line', text: line.description, color: line.color });
+    // Recommendations lead with their priority; type codes (WT, TR…) are not shown to homeowners.
+    for (const zone of floor.recommendedWorks ?? []) entries.push({ id: zone.id, ref: zone.ref ?? '', layer: zone.layer, kind: 'area', text: zoneAppearance(zone).name, color: itemColor(zone), ...recommendation(zone) });
+    for (const pin of floor.overlayPins ?? []) entries.push({ id: pin.id, ref: pin.ref ?? '', layer: pin.layer, kind: 'pin', text: pin.description, color: itemColor(pin), ...recommendation(pin) });
+    for (const line of floor.overlayLines ?? []) entries.push({ id: line.id, ref: line.ref ?? '', layer: line.layer, kind: 'line', text: line.description, color: itemColor(line), ...recommendation(line) });
   }
   entries.sort((a, b) => refNumber(a.ref) - refNumber(b.ref));
   return {
@@ -48,7 +57,17 @@ export function buildLegend(
   };
 }
 
-/** One line of plain text per entry, e.g. "F2 — HM — High Moisture" or "F4 — Restricted access …". */
+/** Legend wording for a priority: "Priority 3", "Further Investigation", "Priority required". */
+export function priorityText(priority: NorthwayPriority): string {
+  const style = priorityStyle(priority);
+  return /^\d$/.test(style.badge) ? `Priority ${style.badge}` : style.name;
+}
+
+/**
+ * One line of plain text per entry: "F2 — HM — High Moisture", "F4 — Restricted access …" or, for a
+ * recommendation, "R1 — Priority 3 — Replace decayed floor joists" (the same order as a future quotation table).
+ */
 export function legendText(entry: LegendEntry): string {
+  if (entry.priority) return [entry.ref, priorityText(entry.priority), entry.text].join(' — ');
   return [entry.ref, entry.kind === 'area' && entry.code && entry.code !== entry.text ? entry.code : null, entry.text].filter(Boolean).join(' — ');
 }

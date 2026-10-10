@@ -13,6 +13,7 @@
   import { canvasMeasure, exportReport, prepareReport, renderReport, REPORT_VIEWS, reportFilename, type ReportView } from '../export/reportExport';
   import { loadNorthwayLogo } from '../export/logo';
   import type { Paper } from '../export/reportLayout';
+  import { unassignedRefs } from '../overlayStore';
 
   let { onclose }: { onclose: () => void } = $props();
 
@@ -34,7 +35,11 @@
 
   let cloud = $derived($cloudDetails !== null);
   let address = $derived(cloud ? $cloudDetails?.property_address ?? '' : localAddress);
-  let details = $derived({ projectName: project?.name ?? '', propertyAddress: address || null, floorName: floor?.name ?? '', surveyDate: project?.surveyDate });
+  /** Recommendations without a Northway Priority block the final export (never inferred); a marked draft is allowed. */
+  let needPriority = $derived.by(() => { void project; return view === 'survey-findings' ? [] : unassignedRefs(floor); });
+  let draftAllowed = $state(false);
+  let blocked = $derived(needPriority.length > 0 && !draftAllowed);
+  let details = $derived({ projectName: project?.name ?? '', propertyAddress: address || null, floorName: floor?.name ?? '', surveyDate: project?.surveyDate, draft: needPriority.length > 0 });
   const prepare = (size: Paper) => project && floor && measureCanvas ? prepareReport(project, floor.id, view, details, $projectSettings, canvasMeasure(measureCanvas), size) : null;
   let report = $derived(prepare(paper));
 
@@ -81,9 +86,10 @@
         {#each REPORT_VIEWS as option (option.id)}
           <label class="flex items-center gap-2 text-sm text-slate-800 px-2 py-1.5 rounded-md cursor-pointer {view === option.id ? 'bg-slate-100' : 'hover:bg-gray-50'}">
             <input type="radio" name="survey-export-view" value={option.id} bind:group={view} />
-            {option.label}
+            {option.label}{#if option.id === 'combined'}<span class="text-xs text-gray-400">(optional)</span>{/if}
           </label>
         {/each}
+        <p class="text-xs text-gray-400 px-2">For reports, export the Survey Findings Plan and the Recommended Works Plan separately.</p>
       </fieldset>
       <fieldset class="space-y-1">
         <legend class="text-xs text-gray-500 mb-1">PNG size</legend>
@@ -121,12 +127,21 @@
         </label>
         <p class="text-xs text-gray-400">Floor name and survey date are saved with the plan.</p>
       </div>
+      {#if needPriority.length}
+        <div class="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900 space-y-1.5" data-export-priority-required>
+          <p><span class="font-semibold">Priority required:</span> {needPriority.join(', ')}. Choose a Northway Priority for each recommendation before the final export.</p>
+          <label class="flex items-start gap-2">
+            <input type="checkbox" bind:checked={draftAllowed} class="mt-0.5" />
+            <span>Export a draft anyway (marked DRAFT)</span>
+          </label>
+        </div>
+      {/if}
       {#if error}<p role="alert" class="text-sm text-red-700">{error}</p>{/if}
       <div class="space-y-2 border-t border-gray-100 pt-3">
-        <button class="w-full px-4 py-2 rounded-lg bg-[#083335] text-white text-sm font-semibold hover:bg-[#0c4447] disabled:opacity-60" disabled={!report || !!busy} onclick={() => download('png')}>
+        <button class="w-full px-4 py-2 rounded-lg bg-[#083335] text-white text-sm font-semibold hover:bg-[#0c4447] disabled:opacity-60" disabled={!report || !!busy || blocked} onclick={() => download('png')}>
           {busy === 'png' ? 'Creating PNG…' : 'Download PNG (300 dpi)'}
         </button>
-        <button class="w-full px-4 py-2 rounded-lg border border-[#083335] text-[#083335] text-sm font-semibold hover:bg-slate-50 disabled:opacity-60" disabled={!report || !!busy} onclick={() => download('pdf')}>
+        <button class="w-full px-4 py-2 rounded-lg border border-[#083335] text-[#083335] text-sm font-semibold hover:bg-slate-50 disabled:opacity-60" disabled={!report || !!busy || blocked} onclick={() => download('pdf')}>
           {busy === 'pdf' ? 'Creating PDF…' : 'Download PDF (A4)'}
         </button>
         {#if report}<p class="text-xs text-gray-400 break-all" data-export-filename>{reportFilename(details, view, 'png')}</p>{/if}

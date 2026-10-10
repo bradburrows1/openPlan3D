@@ -27,15 +27,26 @@ export const PAGE = { footer: 9, gap: 6, scaleBar: 9 };
 const MAX_FONT = 3.0, MIN_FONT = 2.3, FONT_STEP = 0.1;
 const SWATCH = 7, SWATCH_GAP = 2.2, COLUMN_GAP = 6;
 
-export interface LegendSection { layer: OverlayLayer; title: string; entries: LegendEntry[]; emptyText: string }
+/** One line of the Northway Priority Guide: badge, name and customer-facing definition. */
+export interface GuideItem { badge: string; name: string; definition: string; color: string; ink: string }
+
+export interface LegendSection {
+  layer: OverlayLayer;
+  title: string;
+  entries: LegendEntry[];
+  emptyText: string;
+  /** Recommended Works: the compact Northway Priority Guide shown above the entries. */
+  guide?: { title: string; items: GuideItem[] };
+}
 
 export interface LegendRow {
-  kind: 'heading' | 'entry' | 'empty';
+  kind: 'heading' | 'entry' | 'empty' | 'guide-title' | 'guide';
   column: number;
   y: number;
   height: number;
   section: LegendSection;
   entry?: LegendEntry;
+  guide?: GuideItem;
   /** Wrapped text lines (entry description, or the heading/empty text). */
   lines: string[];
 }
@@ -45,8 +56,11 @@ export interface LegendLayout {
   columns: number;
   columnWidth: number;
   height: number;
-  /** Column offsets inside each row: swatch, reference, code, text. */
+  /** Column offsets inside each row: swatch, reference, code or priority badge, text. */
   refX: number;
+  /** Width of a priority badge, and where guide text starts. */
+  badgeWidth: number;
+  guideTextX: number;
   codeX: number;
   textX: number;
   rows: LegendRow[];
@@ -100,10 +114,14 @@ interface Block { rows: BlockRow[]; height: number }
 function legendBlocks(sections: LegendSection[], font: number, columnWidth: number, measure: Measure) {
   const lineHeight = font * 1.38, entryGap = font * 0.5, headingHeight = font * 1.15 * 1.3 + font * 0.7, sectionGap = font * 1.4;
   const refWidth = Math.max(measure('F00', font, true), ...sections.flatMap(s => s.entries.map(e => measure(e.ref, font, true)))) + 1.8;
-  const codeWidth = sections.some(s => s.entries.some(e => e.kind === 'area' && e.code))
-    ? Math.max(...sections.flatMap(s => s.entries.filter(e => e.kind === 'area' && e.code).map(e => measure(e.code!, font, true)))) + 1.8 : 0;
+  // Third column: the type code for finding areas, the priority badge for recommendations.
+  const badgeWidth = measure('FI', font * 0.9, true) + 2.6;
+  const codes = sections.flatMap(s => s.entries.filter(e => !e.priority && e.kind === 'area' && e.code).map(e => measure(e.code!, font, true)));
+  const hasBadges = sections.some(s => s.entries.some(e => e.priority));
+  const codeWidth = codes.length || hasBadges ? Math.max(0, ...codes, hasBadges ? badgeWidth : 0) + 1.8 : 0;
   const refX = SWATCH + SWATCH_GAP, codeX = refX + refWidth, textX = codeX + codeWidth;
   const textWidth = Math.max(10, columnWidth - textX);
+  const guideFont = font * 0.9, guideLine = guideFont * 1.32, guideTextX = badgeWidth + 2.2, guideWidth = Math.max(10, columnWidth - guideTextX - 1.5);
   // Each block is kept together in one column: a section heading with its first entry, then one block per entry.
   const blocks: Block[] = [];
   sections.forEach((section, index) => {
@@ -114,10 +132,21 @@ function legendBlocks(sections: LegendSection[], font: number, columnWidth: numb
           return { kind: 'entry' as const, height: lines.length * lineHeight + entryGap, section, entry, lines };
         })
       : [{ kind: 'empty' as const, height: lineHeight + entryGap, section, lines: wrapText(section.emptyText, columnWidth, font, measure) }];
-    blocks.push({ rows: [heading, items[0]], height: heading.gapBefore + heading.height + items[0].height });
-    for (const item of items.slice(1)) blocks.push({ rows: [item], height: item.height });
+    // The Priority Guide is shown when there are recommendations to explain.
+    const guide: BlockRow[] = section.guide && section.entries.length ? [
+      { kind: 'guide-title', height: guideFont * 2.1, section, lines: [section.guide.title] },
+      ...section.guide.items.map((item, i) => {
+        const lines = wrapText(item.definition, guideWidth, guideFont, measure);
+        return { kind: 'guide' as const, height: (lines.length + 1) * guideLine + guideFont * 0.55 + (i === section.guide!.items.length - 1 ? font * 0.9 : 0), section, guide: item, lines };
+      }),
+    ] : [];
+    // With a guide, the heading and guide form one block so the entries can stay together in reference
+    // order (in the next column if needed); otherwise the heading stays with the first entry.
+    const lead = guide.length ? [heading, ...guide] : [heading, items[0]];
+    blocks.push({ rows: lead, height: heading.gapBefore + lead.reduce((sum, row) => sum + row.height, 0) });
+    for (const item of guide.length ? items : items.slice(1)) blocks.push({ rows: [item], height: item.height });
   });
-  return { blocks, refX, codeX, textX };
+  return { blocks, refX, codeX, textX, badgeWidth, guideTextX };
 }
 
 function flow(blocks: Block[], columns: number, maxHeight: number): { rows: LegendRow[]; height: number; fits: boolean } {
@@ -139,7 +168,7 @@ function flow(blocks: Block[], columns: number, maxHeight: number): { rows: Lege
 
 /** Lay out the legend in `columns` columns, within maxHeight or (maxHeight = Infinity) balanced as short as possible. */
 export function layoutLegend(sections: LegendSection[], columnWidth: number, columns: number, font: number, maxHeight: number, measure: Measure): LegendLayout {
-  const { blocks, refX, codeX, textX } = legendBlocks(sections, font, columnWidth, measure);
+  const { blocks, refX, codeX, textX, badgeWidth, guideTextX } = legendBlocks(sections, font, columnWidth, measure);
   let result = flow(blocks, columns, maxHeight);
   if (!Number.isFinite(maxHeight) || columns > 1) {
     // Balance: the shortest height at which the blocks still fit in the columns.
@@ -154,7 +183,7 @@ export function layoutLegend(sections: LegendSection[], columnWidth: number, col
       if (balanced.fits) result = balanced;
     }
   }
-  return { font, columns, columnWidth, height: result.height, refX, codeX, textX, rows: result.rows, fits: result.fits && result.height <= maxHeight + 0.01 };
+  return { font, columns, columnWidth, height: result.height, refX, codeX, textX, badgeWidth, guideTextX, rows: result.rows, fits: result.fits && result.height <= maxHeight + 0.01 };
 }
 
 function fitPlan(box: Box, bounds: Bounds) {
@@ -214,7 +243,8 @@ export function calculateReportLayout(bounds: Bounds, sections: LegendSection[],
     // still draws the plan within 10% of the largest possible scale.
     const best = candidates[0].score;
     candidates.sort((a, b) => a.pageHeight - b.pageHeight || b.score - a.score);
-    const chosen = candidates.find(c => c.score >= best * 0.9)!;
+    // Scores go negative when a long legend makes the page grow, so measure "within 10%" from |best|.
+    const chosen = candidates.find(c => c.score >= best - Math.abs(best) * 0.1) ?? candidates[0];
     candidates.splice(0, candidates.length, chosen);
   }
   const { score: _score, ...best } = candidates[0];

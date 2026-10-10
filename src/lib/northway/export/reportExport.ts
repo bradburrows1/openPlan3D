@@ -22,6 +22,7 @@ import { MARKUP_STYLES } from '../markupRenderer';
 import { surveyPlanView, type LayerSelection } from '../planView';
 import { formatSurveyDate } from '../surveyMeta';
 import { LAYER_STYLES, rgba } from '../zonePresets';
+import { PRIORITIES, priorityStyle } from '../priorities';
 import { calculateReportLayout, scaleBarLength, type LegendSection, type Measure, type Paper, type ReportLayout } from './reportLayout';
 
 export type ReportView = 'survey-findings' | 'recommended-works' | 'combined';
@@ -45,6 +46,8 @@ export function viewLayers(view: ReportView): LayerSelection {
 }
 
 export interface ReportDetails {
+  /** Exported with recommendations still awaiting a priority: marked DRAFT on the page and in the file name. */
+  draft?: boolean;
   projectName: string;
   propertyAddress?: string | null;
   floorName: string;
@@ -57,7 +60,8 @@ const EMPTY_TEXT: Record<OverlayLayer, string> = { 'survey-findings': 'No findin
 export function legendSections(floor: Floor, view: ReportView): LegendSection[] {
   const layers = viewLayers(view), legend = buildLegend(floor, layers);
   return (['survey-findings', 'recommended-works'] as const).filter(layer => layers[layer])
-    .map(layer => ({ layer, title: SECTION_TITLES[layer], entries: legend[layer], emptyText: EMPTY_TEXT[layer] }));
+    .map(layer => ({ layer, title: SECTION_TITLES[layer], entries: legend[layer], emptyText: EMPTY_TEXT[layer],
+      ...(layer === 'recommended-works' ? { guide: { title: 'NORTHWAY PRIORITY GUIDE', items: PRIORITIES.map(({ badge, name, definition, color, ink }) => ({ badge, name, definition, color, ink })) } } : {}) }));
 }
 
 /** Safe file name: "14-Moor-Lane-Ground-Floor-Survey-Findings.png". Uses the address's first line, not the customer. */
@@ -66,7 +70,7 @@ export function reportFilename(details: ReportDetails, view: ReportView, extensi
     .replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, max).replace(/-+$/, '');
   const place = slug(details.propertyAddress?.split(/[,\n]/)[0] ?? '', 60) || slug(details.projectName, 60) || 'Survey-Plan';
   const floor = slug(details.floorName, 40);
-  return [place, floor, REPORT_VIEWS.find(v => v.id === view)!.file].filter(Boolean).join('-') + '.' + extension;
+  return [place, floor, REPORT_VIEWS.find(v => v.id === view)!.file, details.draft ? 'DRAFT' : ''].filter(Boolean).join('-') + '.' + extension;
 }
 
 export interface PreparedReport {
@@ -124,6 +128,11 @@ function drawHeader(ctx: CanvasRenderingContext2D, report: PreparedReport, logo:
   text(ctx, address, right, header.y + (compact ? 10.6 : 12.5), compact ? 3.3 : 3.6, INK, { align: 'right', maxWidth });
   const line = [details.floorName, details.surveyDate ? `Survey date: ${formatSurveyDate(details.surveyDate)}` : ''].filter(Boolean).join('   ·   ');
   text(ctx, line, right, header.y + (compact ? 15.8 : 18.5), compact ? 2.9 : 3.1, MUTED, { align: 'right', maxWidth });
+  if (details.draft) {
+    // A draft is clearly marked so it is never mistaken for the final report.
+    const label = 'DRAFT: priorities to be confirmed';
+    text(ctx, label, header.x, header.y + header.height - 2.5, compact ? 2.9 : 3.2, '#b42318', { bold: true, spacing: 0.15 });
+  }
   ctx.strokeStyle = BRAND;
   ctx.lineWidth = 0.45;
   ctx.beginPath(); ctx.moveTo(header.x, header.y + header.height); ctx.lineTo(right, header.y + header.height); ctx.stroke();
@@ -175,8 +184,10 @@ function hexagon(ctx: CanvasRenderingContext2D, x: number, y: number, r: number)
 }
 
 /** The legend swatch: the same visual language as the plan (solid findings, dashed/hatched/outlined recommendations). */
-export function drawLegendSwatch(ctx: CanvasRenderingContext2D, entry: Pick<LegendEntry, 'kind' | 'layer' | 'color'>, x: number, y: number, size: number) {
+export function drawLegendSwatch(ctx: CanvasRenderingContext2D, entry: Pick<LegendEntry, 'kind' | 'layer' | 'color' | 'priority'>, x: number, y: number, size: number) {
   const w = size * 2.3, h = size * 1.45, color = entry.color;
+  // Recommendations outline and dash in the priority's darker shade, as on the plan.
+  const ink = entry.priority ? priorityStyle(entry.priority).ink : color;
   ctx.save();
   ctx.setLineDash([]);
   if (entry.kind === 'area') {
@@ -190,7 +201,7 @@ export function drawLegendSwatch(ctx: CanvasRenderingContext2D, entry: Pick<Lege
       for (let t = -h; t < w; t += 1.1) { ctx.moveTo(x + t, y + h); ctx.lineTo(x + t + h, y); }
       ctx.stroke(); ctx.restore();
     }
-    ctx.strokeStyle = rgba(color, style.borderOpacity);
+    ctx.strokeStyle = rgba(ink, style.borderOpacity);
     ctx.lineWidth = style.dash.length ? 0.4 : 0.35;
     ctx.setLineDash(style.dash.length ? [0.9, 0.55] : []);
     ctx.strokeRect(x, y, w, h);
@@ -201,18 +212,34 @@ export function drawLegendSwatch(ctx: CanvasRenderingContext2D, entry: Pick<Lege
     ctx.beginPath(); ctx.moveTo(x + 0.6, cy); ctx.lineTo(x + w - 0.6, cy); ctx.stroke();
     ctx.lineCap = style.coreDash.length ? 'butt' : 'round';
     ctx.setLineDash(style.coreDash.length ? [1.1, 0.7] : []);
-    ctx.strokeStyle = rgba(color, 0.95); ctx.lineWidth = 0.4;
+    ctx.strokeStyle = rgba(ink, 0.95); ctx.lineWidth = 0.4;
     ctx.beginPath(); ctx.moveTo(x + 0.6, cy); ctx.lineTo(x + w - 0.6, cy); ctx.stroke();
   } else {
     const style = MARKUP_STYLES[entry.layer], r = h * 0.48, cx = x + w / 2, cy = y + h / 2;
     if (style.marker === 'circle') { ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); } else hexagon(ctx, cx, cy, r * 1.05);
     ctx.fillStyle = style.filled ? rgba(color, 0.95) : '#ffffff';
     ctx.fill();
+    if (!style.filled) { ctx.fillStyle = rgba(color, 0.22); ctx.fill(); }
     ctx.lineWidth = 0.35;
-    ctx.strokeStyle = style.filled ? rgba('#000000', 0.25) : rgba(color, 0.95);
+    ctx.strokeStyle = style.filled ? rgba('#000000', 0.25) : rgba(ink, 0.95);
     ctx.stroke();
   }
   ctx.restore();
+}
+
+/** A Northway Priority badge: a small rounded tag tinted in the priority colour, with its number or FI. */
+export function drawPriorityBadge(ctx: CanvasRenderingContext2D, badge: string, color: string, ink: string, x: number, baseline: number, width: number, size: number) {
+  const height = size * 1.3, y = baseline - size * 1.0, r = height * 0.28;
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(x, y, width, height, r);
+  ctx.fillStyle = rgba(color, 0.28);
+  ctx.fill();
+  ctx.lineWidth = 0.3;
+  ctx.strokeStyle = rgba(ink, 0.9);
+  ctx.stroke();
+  ctx.restore();
+  text(ctx, badge, x + width / 2, baseline - size * 0.08, size * 0.9, ink, { bold: true, align: 'center' });
 }
 
 function drawLegend(ctx: CanvasRenderingContext2D, layout: ReportLayout) {
@@ -229,13 +256,28 @@ function drawLegend(ctx: CanvasRenderingContext2D, layout: ReportLayout) {
       text(ctx, row.lines[0], x, y + l.font * 1.15, l.font * 1.08, BRAND, { bold: true, spacing: 0.25 });
       ctx.strokeStyle = RULE; ctx.lineWidth = 0.2;
       ctx.beginPath(); ctx.moveTo(x, y + l.font * 1.65); ctx.lineTo(x + l.columnWidth, y + l.font * 1.65); ctx.stroke();
+    } else if (row.kind === 'guide-title' || row.kind === 'guide') {
+      // The guide sits on a light panel so it reads as a key, separate from the list of works.
+      ctx.fillStyle = '#f5f7f9';
+      ctx.fillRect(x, y, l.columnWidth, row.height - (row.kind === 'guide' && row.guide === row.section.guide?.items.at(-1) ? l.font * 0.9 : 0));
+      const size = l.font * 0.9;
+      if (row.kind === 'guide-title') text(ctx, row.lines[0], x + 1.5, y + size * 1.45, size * 0.92, MUTED, { bold: true, spacing: 0.2 });
+      else if (row.guide) {
+        const baseline = y + size * 1.25;
+        drawPriorityBadge(ctx, row.guide.badge, row.guide.color, row.guide.ink, x + 1.5, baseline, l.badgeWidth, size);
+        text(ctx, row.guide.name, x + 1.5 + l.guideTextX, baseline, size, INK, { bold: true });
+        row.lines.forEach((line, i) => text(ctx, line, x + 1.5 + l.guideTextX, baseline + (i + 1) * size * 1.32, size, MUTED));
+      }
     } else if (row.kind === 'empty') {
       text(ctx, row.lines[0], x, y + l.font, l.font, MUTED);
     } else if (row.entry) {
       const baseline = y + l.font;
       drawLegendSwatch(ctx, row.entry, x, baseline - l.font * 0.95, l.font);
       text(ctx, row.entry.ref, x + l.refX, baseline, l.font, INK, { bold: true });
-      if (row.entry.kind === 'area' && row.entry.code) text(ctx, row.entry.code, x + l.codeX, baseline, l.font, row.entry.color, { bold: true });
+      if (row.entry.priority) {
+        const style = priorityStyle(row.entry.priority);
+        drawPriorityBadge(ctx, style.badge, style.color, style.ink, x + l.codeX, baseline, l.badgeWidth, l.font * 0.9);
+      } else if (row.entry.kind === 'area' && row.entry.code) text(ctx, row.entry.code, x + l.codeX, baseline, l.font, row.entry.color, { bold: true });
       row.lines.forEach((line, i) => text(ctx, line, x + l.textX, baseline + i * lineHeight, l.font, INK));
     }
   }
