@@ -230,7 +230,7 @@ it('lays out plans of any shape without distortion and never under the legend', 
     expect(word.pageWidth).toBe(170);
     expect(boxes(word)).toEqual({ overlap: false, insidePage: true });
     // A Word figure is only as tall as the plan needs.
-    if (plan.maxY > plan.maxX * 2) expect(word.pageHeight).toBeGreaterThan(200);
+    if (plan.maxY > plan.maxX * 2) expect(word.pageHeight).toBeGreaterThanOrEqual(200); // the tallest Word frames (200–215 mm)
     if (plan.maxX > plan.maxY * 2) expect(word.pageHeight).toBeLessThanOrEqual(125);
   }
   expect(scaleBarLength(0.1)).toBe(200);

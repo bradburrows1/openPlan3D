@@ -21,7 +21,8 @@ export type Paper = 'a4' | 'word';
 export const PAPERS: Record<Paper, { sizes: [number, number][]; margin: number; header: number }> = {
   a4: { sizes: [[297, 210], [210, 297]], margin: 12, header: 25 },
   // Word: always 17 cm wide; the height follows the plan (from a short landscape figure up to a full page).
-  word: { sizes: [110, 125, 140, 160, 180, 205, 230].map(height => [170, height] as [number, number]), margin: 4, header: 21 },
+  // At most 21.5 cm tall, so even a full-height figure fits on an A4 page with its heading and caption.
+  word: { sizes: [110, 125, 140, 160, 180, 200, 215].map(height => [170, height] as [number, number]), margin: 4, header: 21 },
 };
 export const PAGE = { footer: 9, gap: 6, scaleBar: 9 };
 const MAX_FONT = 3.0, MIN_FONT = 2.3, FONT_STEP = 0.1;
