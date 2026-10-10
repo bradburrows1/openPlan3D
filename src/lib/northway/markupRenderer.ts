@@ -10,6 +10,7 @@
 import type { OverlayLayer, OverlayLine, OverlayPin, Point } from '$lib/models/types';
 import { worldToScreen, type CanvasState } from '$lib/utils/canvasInteraction';
 import { rgba } from './zonePresets';
+import { itemColor, itemInk, PRIORITIES } from './priorities';
 
 export interface MarkupStyle {
   /** Marker outline: circle (findings) or hexagon (recommendations). */
@@ -49,8 +50,11 @@ function markerPath(ctx: CanvasRenderingContext2D, style: MarkupStyle, x: number
   ctx.closePath();
 }
 
-/** A reference marker (F1 / R1) centred on a screen point. Also used for line labels and the legend. */
-export function drawReferenceMarker(ctx: CanvasRenderingContext2D, layer: OverlayLayer, color: string, label: string, x: number, y: number): void {
+/**
+ * A reference marker (F1 / R1) centred on a screen point. Also used for line labels. Recommendations
+ * pass their priority colour and its darker ink: a lightly tinted hexagon with an ink outline and text.
+ */
+export function drawReferenceMarker(ctx: CanvasRenderingContext2D, layer: OverlayLayer, color: string, label: string, x: number, y: number, ink: string = color): void {
   const style = MARKUP_STYLES[layer], r = markerRadius(ctx, label);
   ctx.save();
   ctx.setLineDash([]);
@@ -60,13 +64,14 @@ export function drawReferenceMarker(ctx: CanvasRenderingContext2D, layer: Overla
   markerPath(ctx, style, x, y, r);
   ctx.fillStyle = style.filled ? rgba(color, 0.95) : '#ffffff';
   ctx.fill();
+  if (!style.filled) { ctx.fillStyle = rgba(color, 0.22); ctx.fill(); }
   ctx.lineWidth = style.filled ? 1 : 1.75;
-  ctx.strokeStyle = style.filled ? rgba('#000000', 0.25) : rgba(color, 0.95);
+  ctx.strokeStyle = style.filled ? rgba('#000000', 0.25) : rgba(ink, 0.95);
   ctx.stroke();
   ctx.font = MARKER_FONT;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = style.filled ? '#ffffff' : rgba(color, 1);
+  ctx.fillStyle = style.filled ? '#ffffff' : rgba(ink, 1);
   ctx.fillText(label, x, y + 0.5);
   ctx.restore();
 }
@@ -106,12 +111,13 @@ export function drawMarkupLines(cs: CanvasState, lines: readonly OverlayLine[]):
   for (const line of [...lines].sort((a, b) => Number(a.layer === 'recommended-works') - Number(b.layer === 'recommended-works'))) {
     const style = MARKUP_STYLES[line.layer], pts = screenPoints(cs, line.points);
     ctx.setLineDash([]);
-    ctx.strokeStyle = rgba(line.color, style.bandOpacity);
+    const color = itemColor(line), ink = line.layer === 'recommended-works' ? itemInk(line) : color;
+    ctx.strokeStyle = rgba(color, style.bandOpacity);
     ctx.lineWidth = style.bandWidth;
     stroke(ctx, pts);
     ctx.setLineDash(style.coreDash);
     ctx.lineCap = style.coreDash.length ? 'butt' : 'round';
-    ctx.strokeStyle = rgba(line.color, 0.95);
+    ctx.strokeStyle = rgba(ink, 0.95);
     ctx.lineWidth = style.coreWidth;
     stroke(ctx, pts);
     ctx.lineCap = 'round';
@@ -123,11 +129,11 @@ export function drawMarkupLines(cs: CanvasState, lines: readonly OverlayLine[]):
 export function drawMarkupMarkers(cs: CanvasState, pins: readonly OverlayPin[], lines: readonly OverlayLine[]): void {
   for (const line of lines) {
     const mid = lineMidpoint(line.points), p = worldToScreen(cs, mid.x, mid.y);
-    drawReferenceMarker(cs.ctx, line.layer, line.color, pinLabel(line), p.x, p.y);
+    drawReferenceMarker(cs.ctx, line.layer, itemColor(line), pinLabel(line), p.x, p.y, itemInk(line));
   }
   for (const pin of pins) {
     const p = worldToScreen(cs, pin.x, pin.y);
-    drawReferenceMarker(cs.ctx, pin.layer, pin.color, pinLabel(pin), p.x, p.y);
+    drawReferenceMarker(cs.ctx, pin.layer, itemColor(pin), pinLabel(pin), p.x, p.y, itemInk(pin));
   }
 }
 
@@ -160,7 +166,7 @@ export function drawMarkupSelection(cs: CanvasState, item: OverlayPin | OverlayL
 export function drawLineDraft(cs: CanvasState, layer: OverlayLayer, color: string, points: readonly Point[], pointer: Point | null): void {
   if (!points.length) return;
   const all = pointer ? [...points, pointer] : [...points];
-  if (all.length >= 2) drawMarkupLines(cs, [{ id: 'draft', layer, description: '', color, points: all }]);
+  if (all.length >= 2) drawMarkupLines(cs, [{ id: 'draft', layer, description: '', color, points: all, ...(layer === 'recommended-works' ? { priority: priorityForColor(color) } : {}) }]);
   const { ctx } = cs;
   ctx.save();
   ctx.fillStyle = '#ffffff';
@@ -203,4 +209,9 @@ export function findLineSegmentAt(p: Point, line: OverlayLine, zoom: number): nu
   const tolerance = (MARKUP_STYLES[line.layer].bandWidth / 2 + 4) / zoom;
   for (let k = 1; k < line.points.length; k++) if (segmentDistance(p, line.points[k - 1], line.points[k]) <= tolerance) return k - 1;
   return -1;
+}
+
+/** The priority whose colour a draft line uses (drafts only carry a colour). */
+function priorityForColor(color: string) {
+  return PRIORITIES.find(p => p.color === color)?.id ?? 'unassigned';
 }

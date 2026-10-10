@@ -10,6 +10,7 @@
 import type { OverlayZone, Point } from '$lib/models/types';
 import { worldToScreen, type CanvasState } from '$lib/utils/canvasInteraction';
 import { LAYER_STYLES, rgba, zoneAppearance } from './zonePresets';
+import { itemInk } from './priorities';
 import type { ZoneRect, ZoneTemplate } from './overlayStore';
 
 export type ZoneHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
@@ -55,7 +56,8 @@ export function drawZoneAreas(cs: CanvasState, zones: readonly OverlayZone[]): v
       ctx.restore();
     }
     ctx.setLineDash(style.dash);
-    ctx.strokeStyle = rgba(color, style.borderOpacity);
+    // Recommendations: the priority's darker shade, so even Advisory (yellow) keeps a firm outline.
+    ctx.strokeStyle = rgba(zone.layer === 'recommended-works' ? itemInk(zone) : color, style.borderOpacity);
     ctx.lineWidth = style.borderWidth;
     ctx.strokeRect(r.x, r.y, r.width, r.height);
   }
@@ -82,7 +84,7 @@ export function drawZoneCodes(cs: CanvasState, zones: readonly OverlayZone[]): v
   ctx.textBaseline = 'top';
   ctx.setLineDash([]);
   for (const zone of stacked(zones)) {
-    const { color } = zoneAppearance(zone), style = LAYER_STYLES[zone.layer], code = zoneLabel(zone);
+    const style = LAYER_STYLES[zone.layer], code = zoneLabel(zone), color = zone.layer === 'recommended-works' ? itemInk(zone) : zoneAppearance(zone).color;
     const box = zoneCodeBox(screenRect(cs, zone), zone.layer, ctx.measureText(code).width);
     if (style.codeTag) {
       ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';

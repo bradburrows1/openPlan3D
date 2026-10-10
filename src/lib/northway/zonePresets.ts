@@ -5,6 +5,7 @@
  * screen can load these from the database instead of this file.
  */
 import type { Floor, OverlayLayer, OverlayZone } from '$lib/models/types';
+import { itemColor } from './priorities';
 
 export interface PaletteColour { id: string; name: string; hex: string }
 
@@ -78,7 +79,7 @@ export interface LayerStyle {
 
 export const LAYER_STYLES: Readonly<Record<OverlayLayer, LayerStyle>> = {
   'survey-findings': { label: 'Survey Findings', fillOpacity: 0.25, borderOpacity: 0.8, borderWidth: 1.75, dash: [], hatch: null, codeCorner: 'top-left', codeTag: false },
-  'recommended-works': { label: 'Recommended Works', fillOpacity: 0.07, borderOpacity: 0.95, borderWidth: 2, dash: [7, 4], hatch: { spacing: 9, width: 1, opacity: 0.5 }, codeCorner: 'top-right', codeTag: true },
+  'recommended-works': { label: 'Recommended Works', fillOpacity: 0.12, borderOpacity: 0.95, borderWidth: 2, dash: [7, 4], hatch: { spacing: 9, width: 1, opacity: 0.5 }, codeCorner: 'top-right', codeTag: true },
 };
 
 export const UNKNOWN_ZONE_COLOR = hex('grey');
@@ -97,16 +98,21 @@ export function isHexColour(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
 }
 
-/** What a zone shows: its own values, falling back to its preset, then to neutral defaults. */
-export function zoneAppearance(zone: Pick<OverlayZone, 'layer' | 'code' | 'name' | 'color' | 'preset'>): { code: string; name: string; color: string; custom: boolean } {
+/**
+ * What a zone shows: its own values, falling back to its preset, then to neutral defaults.
+ * Recommended Works areas take their colour from their Northway Priority (priorities.ts), never from
+ * their stored colour or work type.
+ */
+export function zoneAppearance(zone: Pick<OverlayZone, 'layer' | 'code' | 'name' | 'color' | 'preset'> & { priority?: unknown }): { code: string; name: string; color: string; custom: boolean } {
   const preset = findPreset(zone.layer, zone.preset === undefined ? zone.code : zone.preset);
   return {
     code: zone.code,
     name: zone.name?.trim() || preset?.name || zone.code,
-    color: isHexColour(zone.color) ? zone.color : preset?.color ?? UNKNOWN_ZONE_COLOR,
+    color: zone.layer === 'recommended-works' ? itemColor(zone) : isHexColour(zone.color) ? zone.color : preset?.color ?? UNKNOWN_ZONE_COLOR,
     custom: zone.preset === null || !preset,
   };
 }
+
 
 /** Uppercase letters and digits only, at most MAX_CODE_LENGTH. */
 export function cleanCode(value: string): string {
