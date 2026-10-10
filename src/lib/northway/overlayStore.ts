@@ -1,6 +1,7 @@
 import { get, writable } from 'svelte/store';
-import type { Floor, OverlayLayer, OverlayLine, OverlayPin, OverlayZone, Point } from '$lib/models/types';
-import { currentProject, mutateActiveFloor, newElementId } from '$lib/stores/project';
+import type { Floor, OverlayLayer, OverlayLine, OverlayPin, OverlayZone, Point, RecommendationFields } from '$lib/models/types';
+import { priorityStyle, type NorthwayPriority } from './priorities';
+import { currentProject, mutateActiveFloor, newElementId, selectedElementId, selectedElementIds, selectedRoomId } from '$lib/stores/project';
 import { ZONE_PALETTE, findPreset, type ZonePreset } from './zonePresets';
 import { issueRef } from './references';
 
@@ -12,6 +13,16 @@ export interface ZoneTemplate {
   color: string;
   /** The preset code it started from, or null for a custom zone. */
   preset: string | null;
+  /** Recommended Works: the chosen Northway Priority and optional work type (name holds the recommendation text). */
+  priority?: NorthwayPriority;
+  workType?: string | null;
+}
+
+/** Recommendation fields for a new item: priority (its colour follows) and optional work type. */
+function recommendationFields(layer: OverlayLayer, priority: NorthwayPriority | undefined, workType: string | null | undefined): Partial<RecommendationFields> & { color?: string } {
+  if (layer !== 'recommended-works') return {};
+  const chosen = priority ?? 'unassigned';
+  return { priority: chosen, workType: workType ?? null, color: priorityStyle(chosen).color };
 }
 
 /** Template armed by Add Issue Area / Add Recommended Area / Draw Area; the next drag on the plan creates a zone from it. */
@@ -22,7 +33,7 @@ export function presetTemplate(preset: ZonePreset): ZoneTemplate {
 }
 
 export type ZoneRect = Pick<OverlayZone, 'x' | 'y' | 'width' | 'height'>;
-export type ZoneDetails = Partial<Pick<OverlayZone, 'code' | 'name' | 'color' | 'preset' | 'note'>>;
+export type ZoneDetails = Partial<Pick<OverlayZone, 'code' | 'name' | 'color' | 'preset' | 'note'>> & { workType?: string | null };
 
 /** Smallest side of a zone in cm; smaller drags are treated as clicks. */
 export const MIN_ZONE_SIZE = 10;
@@ -67,7 +78,8 @@ export function addZone(template: ZoneTemplate, rect: ZoneRect): string {
   const id = newElementId();
   const { layer, code, name, color, preset } = template;
   mutateActiveFloor(floor => {
-    layerZones(floor, layer, true)!.push({ id, layer, ref: nextRef(layer), code, name, color, preset, shape: 'rect', ...rect } as OverlayZone);
+    layerZones(floor, layer, true)!.push({ id, layer, ref: nextRef(layer), code, name, color, preset, shape: 'rect', ...rect,
+      ...recommendationFields(layer, template.priority, template.workType) } as OverlayZone);
   }, `Added ${NOUN[layer]}`);
   return id;
 }
@@ -81,11 +93,17 @@ export function updateZone(id: string, updates: ZoneDetails & Partial<ZoneRect>)
   }, `Edited ${NOUN[layer]}`, `overlay-zone:${id}:${Object.keys(updates).sort().join(',')}`);
 }
 
-/** Switch a zone to another preset: it takes that preset's code, name and colour. Geometry is unchanged. */
+/**
+ * Switch a zone to another preset: a finding takes that preset's code, name and colour. A
+ * recommendation only takes it as its work type: its text, priority and colour are kept (priority,
+ * not the work type, decides the colour). Geometry is unchanged.
+ */
 export function applyZonePreset(id: string, code: string) {
   const zone = findZone(activeFloor(), id);
   const preset = zone && findPreset(zone.layer, code);
-  if (preset) updateZone(id, { code: preset.code, name: preset.name, color: preset.color, preset: preset.code });
+  if (!preset) return;
+  if (zone.layer === 'recommended-works') updateZone(id, { code: preset.code, preset: preset.code, workType: preset.code } as ZoneDetails);
+  else updateZone(id, { code: preset.code, name: preset.name, color: preset.color, preset: preset.code });
 }
 
 /** Reposition or resize during a drag, without an undo snapshot (the gesture owns it). */
@@ -120,10 +138,14 @@ export function duplicateZone(id: string, offset = 30): string | null {
 // ── Free-text pins and lines ─────────────────────────────────────────
 
 /** What a pin or line is being created with: the layer, then the dialog's description and colour. */
-export interface MarkupDraft { layer: OverlayLayer; description: string; color: string }
+export interface MarkupDraft { layer: OverlayLayer; description: string; color: string; priority?: NorthwayPriority; workType?: string | null }
 
-/** Pin or line tool armed by + Pin / + Line; geometry is captured on the plan, then the dialog asks for text. */
-export const placingMarkup = writable<{ kind: 'pin' | 'line'; layer: OverlayLayer } | null>(null);
+/**
+ * Pin or line tool armed by + Pin / + Line. Findings: geometry is captured on the plan, then the dialog
+ * asks for text. Recommendations: the dialog comes first (priority and text), so `draft` is set and
+ * the item is created as soon as it is placed.
+ */
+export const placingMarkup = writable<{ kind: 'pin' | 'line'; layer: OverlayLayer; draft?: MarkupDraft } | null>(null);
 
 /** Geometry captured on the plan and waiting for its description (the canvas sets it, the dialog consumes it). */
 export const pendingMarkup = writable<{ kind: 'pin'; layer: OverlayLayer; at: Point } | { kind: 'line'; layer: OverlayLayer; points: Point[] } | null>(null);
@@ -139,7 +161,8 @@ function findLine(floor: Floor | undefined, id: string) { return floor?.overlayL
 export function addPin(draft: MarkupDraft, at: Point): string {
   const id = newElementId();
   mutateActiveFloor(floor => {
-    (floor.overlayPins ??= []).push({ id, layer: draft.layer, ref: nextRef(draft.layer), description: draft.description, color: draft.color, x: at.x, y: at.y });
+    (floor.overlayPins ??= []).push({ id, layer: draft.layer, ref: nextRef(draft.layer), description: draft.description, color: draft.color, x: at.x, y: at.y,
+      ...recommendationFields(draft.layer, draft.priority, draft.workType) });
   }, `Added ${MARKUP_NOUN[draft.layer]} pin`);
   return id;
 }
@@ -147,7 +170,8 @@ export function addPin(draft: MarkupDraft, at: Point): string {
 export function addLine(draft: MarkupDraft, points: Point[]): string {
   const id = newElementId();
   mutateActiveFloor(floor => {
-    (floor.overlayLines ??= []).push({ id, layer: draft.layer, ref: nextRef(draft.layer), description: draft.description, color: draft.color, points: points.map(p => ({ x: p.x, y: p.y })) });
+    (floor.overlayLines ??= []).push({ id, layer: draft.layer, ref: nextRef(draft.layer), description: draft.description, color: draft.color, points: points.map(p => ({ x: p.x, y: p.y })),
+      ...recommendationFields(draft.layer, draft.priority, draft.workType) });
   }, `Added ${MARKUP_NOUN[draft.layer]} line`);
   return id;
 }
@@ -229,6 +253,7 @@ export function finishLineDraft(): boolean {
   if (!tool || tool.kind !== 'line') return false;
   placingMarkup.set(null);
   if (points.length < 2) return false;
+  if (tool.draft) { selectNew(addLine(tool.draft, points)); return true; }
   pendingMarkup.set({ kind: 'line', layer: tool.layer, points });
   return true;
 }
@@ -246,4 +271,55 @@ export function freshLayerColour(floor: Floor | undefined, layer: OverlayLayer):
     ...floorLines(floor).filter(line => line.layer === layer).map(line => line.color),
   ].map(color => color?.toLowerCase()));
   return (ZONE_PALETTE.find(colour => !used.has(colour.hex.toLowerCase())) ?? ZONE_PALETTE[0]).hex;
+}
+
+/** Select a just-created item (as the dialogs do). */
+function selectNew(id: string) {
+  selectedRoomId.set(null);
+  selectedElementIds.set(new Set());
+  selectedElementId.set(id);
+}
+
+/** Place a pin at a point: recommendations with a draft are created at once; findings go to the dialog. */
+export function placePinAt(at: Point): string | null {
+  const tool = get(placingMarkup);
+  if (!tool || tool.kind !== 'pin') return null;
+  placingMarkup.set(null);
+  if (tool.draft) { const id = addPin(tool.draft, at); selectNew(id); return id; }
+  pendingMarkup.set({ kind: 'pin', layer: tool.layer, at });
+  return null;
+}
+
+// ── Northway Priority (Recommended Works) ────────────────────────────
+
+function findRecommendation(floor: Floor | undefined, id: string): (OverlayZone | OverlayPin | OverlayLine) & RecommendationFields | undefined {
+  const item = floorZones(floor).find(zone => zone.id === id) ?? findPin(floor, id) ?? findLine(floor, id);
+  return item?.layer === 'recommended-works' ? item as any : undefined;
+}
+
+/** Change a recommendation's priority. Its reference, text and geometry are unchanged; its colour follows. */
+export function setPriority(id: string, priority: NorthwayPriority) {
+  mutateActiveFloor(floor => {
+    const item = findRecommendation(floor, id);
+    if (item) { item.priority = priority; item.color = priorityStyle(priority).color; }
+  }, 'Changed priority');
+}
+
+/** Edit a recommendation's text (area name or pin/line description), work type or quoted price. */
+export function updateRecommendation(id: string, updates: { text?: string; workType?: string | null; quotedPricePence?: number | null }) {
+  mutateActiveFloor(floor => {
+    const item = findRecommendation(floor, id);
+    if (!item) return;
+    if (updates.text !== undefined) { if ('points' in item || !('shape' in item)) (item as OverlayPin).description = updates.text; else (item as OverlayZone).name = updates.text; }
+    if (updates.workType !== undefined) item.workType = updates.workType;
+    if (updates.quotedPricePence !== undefined) { if (updates.quotedPricePence === null) delete item.quotedPricePence; else item.quotedPricePence = updates.quotedPricePence; }
+  }, 'Edited recommendation', `recommendation:${id}:${Object.keys(updates).sort().join(',')}`);
+}
+
+/** References of recommendations on a floor that still need a priority (blocks the final export). */
+export function unassignedRefs(floor: Floor | undefined): string[] {
+  return [...floorZones(floor), ...floorPins(floor), ...floorLines(floor)]
+    .filter(item => item.layer === 'recommended-works' && ((item as RecommendationFields).priority ?? 'unassigned') === 'unassigned')
+    .map(item => item.ref ?? '').filter(Boolean)
+    .sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
 }

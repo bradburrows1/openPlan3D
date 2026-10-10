@@ -281,17 +281,34 @@ export interface SurveyFindingZone extends OverlayZoneBase {
   code: SurveyFindingCode | (string & {});
 }
 
-export interface RecommendedWorkZone extends OverlayZoneBase {
+/**
+ * Northway: fields every Recommended Works item (area, pin or line) carries, kept separate from its
+ * geometry and R reference so the same R1 can later appear in a quotation table.
+ */
+export interface RecommendationFields {
+  /** Northway Priority (src/lib/northway/priorities.ts); 'unassigned' for older items until chosen. */
+  priority?: 'priority_3' | 'priority_2' | 'priority_1' | 'further_investigation' | 'unassigned';
+  /** Optional work type: a preset code (TR, WT, …) used only as secondary information. */
+  workType?: string | null;
+  /** Optional quoted price in pence (GBP), for a future costs schedule. Never drawn on the plan. */
+  quotedPricePence?: number | null;
+  /** Reserved for the future quotation: specification text and quantity. Not used yet. */
+  specification?: string;
+  quantity?: string;
+}
+
+/** For areas, the recommendation text is `name`. */
+export interface RecommendedWorkZone extends OverlayZoneBase, RecommendationFields {
   layer: 'recommended-works';
 }
 
 export type OverlayZone = SurveyFindingZone | RecommendedWorkZone;
 
 /**
- * Northway: a free-text point marker on one overlay layer. Only its reference (F1, R2…) is drawn on
+ * Northway: a free-text point marker on one overlay layer (priority fields apply on Recommended Works only). Only its reference (F1, R2…) is drawn on
  * the plan; the description appears in the legend.
  */
-export interface OverlayPin {
+export interface OverlayPin extends RecommendationFields {
   id: string;
   layer: OverlayLayer;
   ref?: string;
@@ -303,7 +320,7 @@ export interface OverlayPin {
 }
 
 /** Northway: a free-text line or polyline markup (two or more points, world cm) on one overlay layer. */
-export interface OverlayLine {
+export interface OverlayLine extends RecommendationFields {
   id: string;
   layer: OverlayLayer;
   ref?: string;
