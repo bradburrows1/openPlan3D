@@ -29,7 +29,8 @@
   import { getWallTextureCanvas, getFloorTextureCanvas, setTextureLoadCallback } from '$lib/utils/textureGenerator';
   import { projectSettings, formatLength, formatArea } from '$lib/stores/settings';
   import { planFurniture } from '$lib/northway/fixtures';
-  import { addZone, setZoneRect, placingZone, normalizeRect, MIN_ZONE_SIZE, type ZoneRect, type ZoneTemplate, placingMarkup, pendingMarkup, lineDraft, finishLineDraft, cancelMarkupTool, setPinPosition, setLinePoints, insertLinePoint, removeLinePoint } from '$lib/northway/overlayStore';
+  import { addZone, setZoneRect, placingZone, normalizeRect, MIN_ZONE_SIZE, type ZoneRect, type ZoneTemplate, placingMarkup, placePinAt, lineDraft, finishLineDraft, cancelMarkupTool, setPinPosition, setLinePoints, insertLinePoint, removeLinePoint } from '$lib/northway/overlayStore';
+  import { itemColor } from '$lib/northway/priorities';
   import { drawMarkupLines, drawMarkupMarkers, drawMarkupSelection, drawLineDraft, findMarkupAt, findLineVertexAt, findLineSegmentAt, markerRadius } from '$lib/northway/markupRenderer';
   import { drawZoneAreas, drawZoneCodes, drawZoneSelection, drawZoneDraft, zonesAt, pickZoneAt, findZoneHandleAt, resizeZoneRect, zoneHandlePoint, zoneCursor, type ZoneHandle } from '$lib/northway/overlayRenderer';
   import { isTechnicalStyle } from '$lib/utils/planStyle';
@@ -235,7 +236,7 @@
   $effect(() => { if (currentTool !== 'select') { placingZone.set(null); cancelMarkupTool(); } });
   // Northway: free-text pins and lines (+ Pin / + Line). Geometry is captured here; the
   // description dialog (MarkupDialog) then creates the item.
-  let markupTool: { kind: 'pin' | 'line'; layer: 'survey-findings' | 'recommended-works' } | null = $state(null);
+  let markupTool: { kind: 'pin' | 'line'; layer: 'survey-findings' | 'recommended-works'; draft?: { priority?: string } } | null = $state(null);
   onDestroy(placingMarkup.subscribe((tool) => { markupTool = tool; markDirty(); }));
   let lineDraftPoints: Point[] = $state([]);
   onDestroy(lineDraft.subscribe((points) => { lineDraftPoints = points; markDirty(); }));
@@ -1280,7 +1281,7 @@
 
     if (overlayPins.length || overlayLines.length) drawMarkupMarkers(getCS(), overlayPins, overlayLines);
     if (selectedMarkup) drawMarkupSelection(getCS(), selectedMarkup);
-    if (markupTool?.kind === 'line' && lineDraftPoints.length) drawLineDraft(getCS(), markupTool.layer, '#475569', lineDraftPoints, { x: snap(mousePos.x), y: snap(mousePos.y) });
+    if (markupTool?.kind === 'line' && lineDraftPoints.length) drawLineDraft(getCS(), markupTool.layer, markupTool.draft ? itemColor({ layer: markupTool.layer, priority: markupTool.draft.priority }) : '#475569', lineDraftPoints, { x: snap(mousePos.x), y: snap(mousePos.y) });
     if (selectedZone) drawZoneSelection(getCS(), selectedZone);
     if (drawingZone && placingZoneTemplate) drawZoneDraft(getCS(), placingZoneTemplate, normalizeRect(drawingZone.start, drawingZone.end));
 
@@ -2383,14 +2384,12 @@
       return;
     }
 
-    // Northway: + Pin places at the click and asks for a description; + Line adds a point per click
-    // (double-click, Enter or Finish completes it).
+    // Northway: + Pin places at the click; + Line adds a point per click (double-click, Enter or
+    // Finish completes it). Findings then ask for a description; recommendations were described first.
     if (markupTool) {
       const at = { x: snap(wp.x), y: snap(wp.y) };
-      if (markupTool.kind === 'pin') {
-        pendingMarkup.set({ kind: 'pin', layer: markupTool.layer, at });
-        placingMarkup.set(null);
-      } else lineDraft.update(points => [...points, at]);
+      if (markupTool.kind === 'pin') placePinAt(at);
+      else lineDraft.update(points => [...points, at]);
       return;
     }
 

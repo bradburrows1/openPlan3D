@@ -6,6 +6,7 @@
   import { buildLegend, LEGEND_LAYERS } from '../legend';
   import { settingsLayers } from '../planView';
   import MarkupSwatch from './MarkupSwatch.svelte';
+  import PriorityBadge from './PriorityBadge.svelte';
 
   // Floors are edited in place, so read them through the project (a new object on every change).
   let legend = $derived.by(() => {
@@ -32,7 +33,8 @@
               <button class="w-full flex items-start gap-2 px-2 py-1 rounded-md text-left text-xs hover:bg-gray-50 {$selectedElementId === entry.id ? 'bg-blue-50 ring-1 ring-blue-200' : ''}" onclick={() => select(entry.id)} data-reference={entry.ref}>
                 <span class="mt-0.5"><MarkupSwatch kind={entry.kind} {layer} color={entry.color} width={18} height={12} /></span>
                 <span class="font-semibold w-7 shrink-0 text-slate-800">{entry.ref}</span>
-                {#if entry.kind === 'area'}<span class="font-semibold shrink-0" style="color: {entry.color}">{entry.code}</span>{/if}
+                {#if entry.priority}<PriorityBadge priority={entry.priority} />
+                {:else if entry.kind === 'area'}<span class="font-semibold shrink-0" style="color: {entry.color}">{entry.code}</span>{/if}
                 <span class="text-gray-600 line-clamp-2 break-words min-w-0">{entry.text}</span>
               </button>
             </li>

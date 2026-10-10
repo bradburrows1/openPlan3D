@@ -15,6 +15,10 @@
   import { presetsFor } from '../zonePresets';
   import ZoneSwatch from './ZoneSwatch.svelte';
   import ZoneTemplateDialog from './ZoneTemplateDialog.svelte';
+  import RecommendationDialog from './RecommendationDialog.svelte';
+  import PriorityBadge from './PriorityBadge.svelte';
+  import { priorityStyle, type NorthwayPriority } from '../priorities';
+  import { unassignedRefs } from '../overlayStore';
 
   let { layer }: { layer: OverlayLayer } = $props();
 
@@ -33,6 +37,27 @@
   let visible = $derived($projectSettings[settingKey] !== false);
   let armed = $derived($placingZone?.layer === layer ? $placingZone : null);
   let markupArmed = $derived($placingMarkup?.layer === layer ? $placingMarkup.kind : null);
+  /** Recommended Works: the dialog (priority, text) comes before drawing. */
+  let recommendationKind = $state<'area' | 'pin' | 'line' | null>(null);
+  /** What is about to be drawn or placed, shown while armed. */
+  let armedRecommendation = $derived(findings ? null
+    : armed ? { priority: armed.priority ?? 'unassigned', text: armed.name }
+    : $placingMarkup?.layer === layer && $placingMarkup.draft ? { priority: $placingMarkup.draft.priority ?? 'unassigned', text: $placingMarkup.draft.description } : null);
+  let needPriority = $derived.by(() => {
+    if (findings) return [];
+    const project = $currentProject;
+    return unassignedRefs(project?.floors.find(f => f.id === project.activeFloorId));
+  });
+
+  function armRecommendation(kind: 'area' | 'pin' | 'line', draft: { priority: NorthwayPriority; text: string; workType: string | null }) {
+    recommendationKind = null;
+    prepare();
+    cancelMarkupTool();
+    placingZone.set(null);
+    const color = priorityStyle(draft.priority).color;
+    if (kind === 'area') placingZone.set({ layer, code: draft.workType ?? 'REC', name: draft.text, color, preset: draft.workType, priority: draft.priority, workType: draft.workType });
+    else placingMarkup.set({ kind, layer, draft: { layer, description: draft.text, color, priority: draft.priority, workType: draft.workType } });
+  }
 
   function prepare() {
     selectedTool.set('select');
@@ -52,6 +77,7 @@
   }
 
   function toggleArea() {
+    if (!findings) { if (armed) placingZone.set(null); else { cancelMarkupTool(); recommendationKind = 'area'; } return; }
     pickerOpen = !pickerOpen;
     if (pickerOpen) cancelMarkupTool();
     else if (armed) placingZone.set(null);
@@ -59,6 +85,7 @@
 
   function toggleMarkup(kind: 'pin' | 'line') {
     if (markupArmed === kind) { cancelMarkupTool(); return; }
+    if (!findings) { placingZone.set(null); cancelMarkupTool(); recommendationKind = kind; return; }
     prepare();
     placingZone.set(null);
     pickerOpen = false;
@@ -89,7 +116,7 @@
 <h3 class="text-xs font-semibold text-gray-400 uppercase mb-2 mt-3">{text.title}</h3>
 <div class="space-y-1" {...hooks.group} role="group" aria-label={text.title}>
   <div class="flex gap-1.5">
-    <button class={toolClass(pickerOpen || !!armed)} aria-expanded={pickerOpen} aria-label={text.add} title={text.help} onclick={toggleArea}>
+    <button class={toolClass(pickerOpen || !!armed)} aria-expanded={findings ? pickerOpen : undefined} aria-label={text.add} title={text.help} onclick={toggleArea}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         {#if findings}<rect x="4" y="6" width="16" height="12" rx="1"/>{:else}<rect x="4" y="6" width="16" height="12" rx="1" stroke-dasharray="3 2"/>{/if}
       </svg>
@@ -109,6 +136,15 @@
     </button>
   </div>
 
+  {#if armedRecommendation}
+    <div class="px-2 py-1.5 rounded-md bg-blue-50 ring-1 ring-blue-200 text-xs space-y-1" data-armed-recommendation>
+      <div class="flex items-start gap-2">
+        <PriorityBadge priority={armedRecommendation.priority} />
+        <span class="text-slate-800 line-clamp-2 break-words min-w-0">{armedRecommendation.text}</span>
+      </div>
+      {#if armed}<p class="text-gray-500">Drag a rectangle on the plan.</p>{/if}
+    </div>
+  {/if}
   {#if markupArmed === 'pin'}
     <p class="px-1 py-1 text-xs text-gray-500" data-markup-hint>{$t('northway.pinHint')}</p>
   {:else if markupArmed === 'line'}
@@ -122,7 +158,7 @@
     </div>
   {/if}
 
-  {#if pickerOpen}
+  {#if pickerOpen && findings}
     <div class="grid grid-cols-1 gap-1 pl-2" {...hooks.presets}>
       {#each presetsFor(layer) as preset (preset.code)}
         {@const template = presetTemplate(preset)}
@@ -150,6 +186,11 @@
       </button>
     </div>
   {/if}
+  {#if needPriority.length}
+    <p class="px-2 py-1 text-xs text-amber-800 bg-amber-50 rounded-md" role="status" data-priority-required>
+      Priority required: {needPriority.join(', ')}
+    </p>
+  {/if}
   <button
     class="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-gray-600 hover:bg-gray-50"
     aria-pressed={!visible}
@@ -160,6 +201,11 @@
     {visible ? text.hide : text.show}
   </button>
 </div>
+
+{#if recommendationKind}
+  {@const kind = recommendationKind}
+  <RecommendationDialog {kind} onclose={() => recommendationKind = null} onsubmit={(draft) => armRecommendation(kind, draft)} />
+{/if}
 
 {#if dialogOpen}
   <ZoneTemplateDialog {layer} initialColor={freshLayerColour(activeFloor(), layer)} onclose={() => dialogOpen = false}

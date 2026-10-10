@@ -23,6 +23,10 @@
   import { cleanCode, presetsFor, zoneAppearance } from '$lib/northway/zonePresets';
   import { applyZonePreset, duplicateZone, floorZones, removeZone, updateZone, duplicateMarkup, removeMarkup, updateMarkup, removeLinePoint } from '$lib/northway/overlayStore';
   import MarkupSwatch from '$lib/northway/components/MarkupSwatch.svelte';
+  import PrioritySelector from '$lib/northway/components/PrioritySelector.svelte';
+  import { itemColor, itemPriority, formatPence, parsePounds } from '$lib/northway/priorities';
+  import { setPriority, updateRecommendation } from '$lib/northway/overlayStore';
+  import { RECOMMENDED_WORK_PRESETS } from '$lib/northway/zonePresets';
   import ZoneSwatch from '$lib/northway/components/ZoneSwatch.svelte';
   import ZoneColourPicker from '$lib/northway/components/ZoneColourPicker.svelte';
     import type { Floor, Wall, Door, Window as Win, Room, FurnitureItem, Stair, Column, RoomCategory, TextAnnotation } from '$lib/models/types';
@@ -65,6 +69,8 @@
   const overlayLayerShown = (layer: string) => layer === 'survey-findings' ? settings.showSurveyFindings !== false : settings.showRecommendedWorks !== false;
   let selectedZone = $derived(floorZones(floor ?? undefined).find(zone => zone.id === selId && overlayLayerShown(zone.layer)) ?? null);
   let selectedMarkup = $derived([...floor?.overlayPins ?? [], ...floor?.overlayLines ?? []].find(item => item.id === selId && overlayLayerShown(item.layer)) ?? null);
+  /** Northway: a selected Recommended Works item (area, pin or line) gets the simplified priority panel. */
+  let selectedRecommendation = $derived(selectedZone?.layer === 'recommended-works' ? selectedZone : selectedMarkup?.layer === 'recommended-works' ? selectedMarkup : null);
   let hasBgImage = $derived(!!floor?.backgroundImage);
   let selectedRoom = $derived(floor && selRoomId
     ? resolveRooms(floor, detectedRooms).find(r => r.id === selRoomId) ?? null
@@ -370,7 +376,7 @@
     { label: '🧶 Carpet', ids: ['carpet-beige', 'carpet-gray'] },
   ];
 
-  let hasSelection = $derived(!!selectedWall || !!selectedDoor || !!selectedWindow || !!selectedFurniture || !!selectedRoom || !!selectedStair || !!selectedColumn || !!selectedTextAnnotation || !!selectedEntourage || !!selectedZone || !!selectedMarkup || (!is3D && hasBgImage));
+  let hasSelection = $derived(!!selectedWall || !!selectedDoor || !!selectedWindow || !!selectedFurniture || !!selectedRoom || !!selectedStair || !!selectedColumn || !!selectedTextAnnotation || !!selectedEntourage || !!selectedZone || !!selectedMarkup || !!selectedRecommendation || (!is3D && hasBgImage));
 </script>
 
 <!-- Right sidebar on md+; slides up as a bottom sheet on phones -->
@@ -874,6 +880,64 @@
         </div>
       </div>
       {/if}
+    </div>
+
+  {:else if selectedRecommendation}
+    {@const item = selectedRecommendation}
+    {@const kind = 'shape' in item ? 'area' : 'points' in item ? 'line' : 'pin'}
+    {@const priority = itemPriority(item) ?? 'unassigned'}
+    {@const text = 'shape' in item ? (item.name ?? '') : (item as { description: string }).description}
+    <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+      <MarkupSwatch {kind} layer="recommended-works" color={itemColor(item)} />
+      {kind === 'area' ? 'Recommended area' : kind === 'pin' ? 'Recommendation pin' : 'Recommendation line'}
+      {#if item.ref}<span class="ml-auto px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 text-xs font-bold" title={$t('northway.referenceHelp')} data-reference-badge>{item.ref}</span>{/if}
+    </h3>
+    <div class="space-y-3" data-recommendation-properties>
+      {#if priority === 'unassigned'}
+        <p class="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5" role="status" data-priority-required>
+          Priority required. This recommendation was saved before Northway Priorities; choose one before the final export.
+        </p>
+      {/if}
+      <PrioritySelector value={priority === 'unassigned' ? null : priority} onchange={(value) => setPriority(item.id, value)} />
+      <label class="block">
+        <span class="text-xs text-gray-500">Recommendation</span>
+        <textarea rows="3" maxlength="500" class="w-full px-2 py-1 border border-gray-200 rounded text-sm resize-y" value={text}
+          oninput={(e) => { const value = (e.target as HTMLTextAreaElement).value; if (value.trim()) updateRecommendation(item.id, { text: value }); }}
+          onblur={(e) => { const input = e.target as HTMLTextAreaElement; if (!input.value.trim()) input.value = text; else if (input.value !== input.value.trim()) updateRecommendation(item.id, { text: input.value.trim() }); }}></textarea>
+      </label>
+      <label class="block">
+        <span class="text-xs text-gray-500">Work type <span class="text-gray-400">(optional)</span></span>
+        <select class="w-full px-2 py-1 border border-gray-200 rounded text-sm" value={item.workType ?? ''}
+          onchange={(e) => updateRecommendation(item.id, { workType: (e.target as HTMLSelectElement).value || null })}>
+          <option value="">None</option>
+          {#each RECOMMENDED_WORK_PRESETS.filter(p => !p.disabled || p.code === item.workType) as preset (preset.code)}<option value={preset.code}>{preset.name}</option>{/each}
+          {#if item.workType && !RECOMMENDED_WORK_PRESETS.some(p => p.code === item.workType)}<option value={item.workType}>{item.workType}</option>{/if}
+        </select>
+      </label>
+      <label class="block">
+        <span class="text-xs text-gray-500">Quoted price <span class="text-gray-400">(optional, £)</span></span>
+        <input inputmode="decimal" class="w-full px-2 py-1 border border-gray-200 rounded text-sm" placeholder="Not quoted" value={item.quotedPricePence != null ? (item.quotedPricePence / 100).toFixed(2) : ''}
+          onchange={(e) => { const input = e.target as HTMLInputElement, pence = parsePounds(input.value); if (pence === undefined) input.value = item.quotedPricePence != null ? (item.quotedPricePence / 100).toFixed(2) : ''; else updateRecommendation(item.id, { quotedPricePence: pence }); }} />
+        <span class="block text-xs text-gray-400 mt-1">{item.quotedPricePence != null ? `${formatPence(item.quotedPricePence)}. ` : ''}Not shown on the plan; kept for a future costs schedule.</span>
+      </label>
+      {#if 'shape' in item}
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block">
+            <span class="text-xs text-gray-500">{$t('northway.zoneWidth')} ({unitLabel()})</span>
+            <input type="number" value={displayValue(item.width)} onblur={(e) => dimensionInput(e, item.width, value => updateZone(item.id, { width: value }))} oninput={(e) => dimensionInput(e, item.width, value => updateZone(item.id, { width: value }))} min={settings.units === 'imperial' ? 1 / 2.54 : 1} step="any" class="w-full px-2 py-1 border border-gray-200 rounded text-sm" />
+          </label>
+          <label class="block">
+            <span class="text-xs text-gray-500">{$t('northway.zoneDepth')} ({unitLabel()})</span>
+            <input type="number" value={displayValue(item.height)} onblur={(e) => dimensionInput(e, item.height, value => updateZone(item.id, { height: value }))} oninput={(e) => dimensionInput(e, item.height, value => updateZone(item.id, { height: value }))} min={settings.units === 'imperial' ? 1 / 2.54 : 1} step="any" class="w-full px-2 py-1 border border-gray-200 rounded text-sm" />
+          </label>
+        </div>
+      {:else if 'points' in item}
+        <p class="text-xs text-gray-400">{$t('northway.lineEditHelp')}</p>
+      {/if}
+      <div class="flex gap-2">
+        <button onclick={() => { const copy = 'shape' in item ? duplicateZone(item.id) : duplicateMarkup(item.id); if (copy) selectedElementId.set(copy); }} class="flex-1 px-2 py-1.5 border border-gray-200 rounded text-sm hover:bg-gray-50 transition-colors">{$t('northway.duplicate')}</button>
+        <button onclick={() => { if ('shape' in item) removeZone(item.id); else removeMarkup(item.id); selectedElementId.set(null); }} class="flex-1 px-2 py-1.5 border border-red-200 text-red-600 rounded text-sm hover:bg-red-50 transition-colors">{$t('northway.delete')}</button>
+      </div>
     </div>
 
   {:else if selectedZone}
