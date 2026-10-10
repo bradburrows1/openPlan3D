@@ -476,3 +476,21 @@ Known limitations:
 * The Stage 4 custom-recommendation dialog (code and colour) is no longer offered for Recommended
   Works. Its data is still read, and findings keep their custom dialog.
 * The quoted price is edited only in the properties panel, not when the recommendation is created.
+
+## Stage 7: production readiness (v1)
+
+No new survey features. Stage 7 covers:
+
+* iPad and touch behaviour;
+* touch-sized controls;
+* installable web app;
+* save, offline and session-expiry protection;
+* plain-English errors;
+* delete safety;
+* Word-friendly export heights;
+* security headers;
+* documentation.
+
+Details are in [`STAGE_7_AUDIT.md`](STAGE_7_AUDIT.md) (findings and plan) and
+[`NORTHWAY_PLANS_V1_REPORT.md`](NORTHWAY_PLANS_V1_REPORT.md) (what was verified, limitations and next
+steps).

@@ -227,6 +227,26 @@ Stage 3 added private staff sign-in and the Supabase-backed plan library, with s
 [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md) and "Stage 3: what was built" in
 [`NORTHWAY_CUSTOMISATION_PLAN.md`](NORTHWAY_CUSTOMISATION_PLAN.md).
 
+### Stage 7 additions (v1 production readiness)
+
+Stage 7 added no new survey features. It covers:
+
+* iPad touch handling (`FloorPlanCanvas.svelte`):
+  * a touch becomes a press only once the finger moves or lifts, so a pinch never draws;
+  * an 8 px touch drag threshold;
+  * finger-sized overlay handles.
+* Touch-sized controls (`app.css`, `[data-northway-touch]`, coarse pointers only).
+* PWA metadata (`static/manifest.webmanifest`, `static/icons/`, `src/app.html`).
+* Hiding upstream 3D, elevation, DXF/DWG and onboarding in the Northway editor.
+* Save reliability (`cloud/session.ts`, `cloud/auth.ts`, `cloud/errors.ts`):
+  * Offline and Save failed states;
+  * an immediate recovery copy when the page is hidden or the session ends;
+  * a return to the plan after signing in again.
+* Plain-English errors, delete safety and Vercel security headers.
+
+See [`STAGE_7_AUDIT.md`](STAGE_7_AUDIT.md), [`SECURITY_CHECKLIST.md`](SECURITY_CHECKLIST.md),
+[`DEPLOYMENT.md`](DEPLOYMENT.md) and [`NORTHWAY_PLANS_V1_REPORT.md`](NORTHWAY_PLANS_V1_REPORT.md).
+
 ### Stage 6 additions
 
 Stage 6 added the Northway Priority System for Recommended Works (`src/lib/northway/priorities.ts`).
