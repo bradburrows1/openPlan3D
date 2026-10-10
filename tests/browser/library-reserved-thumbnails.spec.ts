@@ -10,7 +10,7 @@ for (const mode of ['missing', 'saved', 'read failure'] as const) {
     page.on('request', request => {
       // Firefox reports the document favicon as an image request too.
       if (request.resourceType() === 'image' && /^https?:/.test(request.url())
-        && request.url() !== 'http://127.0.0.1:4188/favicon.svg') imageRequests.push(request.url());
+        && !/^http:\/\/127\.0\.0\.1:4188\/(favicon\.svg|icons\/)/.test(request.url())) imageRequests.push(request.url()); // Northway: app icons
     });
     await page.addInitScript(({ source, ids, preview, mode }) => {
       localStorage.setItem('hasSeenWelcome', 'true');
