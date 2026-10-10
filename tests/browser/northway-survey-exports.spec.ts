@@ -105,27 +105,24 @@ test('Stage 5 workflow: pins, lines, stable references, legends and branded expo
   await dialog.getByRole('button', { name: 'Add Line' }).click();
   await expect(badge).toHaveText('F3');
 
-  // 8. WT area.
-  await works.getByRole('button', { name: 'Add Recommended Area' }).click();
-  await works.getByRole('button', { name: /Woodworm Treatment/ }).click();
+  // 8–10. Recommendations (Stage 6 flow): priority and text first, then draw or place.
+  const recommendation = async (kind: 'area' | 'pin' | 'line', priority: string, text: string | null, workType?: string) => {
+    await works.getByRole('button', { name: { area: 'Add Recommended Area', pin: 'Add Recommendation Pin', line: 'Add Recommendation Line' }[kind] }).click();
+    const form = page.getByRole('dialog', { name: { area: 'New recommended area', pin: 'New recommendation pin', line: 'New recommendation line' }[kind] });
+    await form.getByRole('radio', { name: priority }).click();
+    if (workType) await form.getByRole('combobox', { name: /Work type/ }).selectOption({ label: workType });
+    if (text) await form.getByRole('textbox', { name: 'Recommendation' }).fill(text);
+    await form.getByRole('button', { name: { area: 'Draw Area', pin: 'Place Pin', line: 'Draw Line' }[kind] }).click();
+  };
+  await recommendation('area', '2 — Recommended Work', 'Woodworm Treatment', 'Woodworm Treatment');
   await drag(page, [cx + 20 + s, cy + 20], [cx + 180 + s, cy + 130]);
   await expect(badge).toHaveText('R1');
-
-  // 9. Recommendation pin.
-  await works.getByRole('button', { name: 'Add Recommendation Pin' }).click();
+  await recommendation('pin', 'FI — Further Investigation', 'Open floor locally for further inspection');
   await page.mouse.click(cx + 100 + s, cy + 75);
-  dialog = page.getByRole('dialog', { name: 'Recommendation pin' });
-  await dialog.getByRole('textbox', { name: 'Description' }).fill('Open floor locally for further inspection');
-  await dialog.getByRole('button', { name: 'Add Pin' }).click();
   await expect(badge).toHaveText('R2');
-
-  // 10. Recommendation line: two points, double-click to finish.
-  await works.getByRole('button', { name: 'Add Recommendation Line' }).click();
+  await recommendation('line', '3 — Priority Work', 'Install additional damp-proof course along this wall');
   await page.mouse.click(cx - 200 + s, cy - 150);
   await page.mouse.dblclick(cx + 200 + s, cy - 150);
-  dialog = page.getByRole('dialog', { name: 'Recommendation line' });
-  await dialog.getByRole('textbox', { name: 'Description' }).fill('Install additional damp-proof course along this wall');
-  await dialog.getByRole('button', { name: 'Add Line' }).click();
   await expect(badge).toHaveText('R3');
 
   let saved = (await project(page));
@@ -172,7 +169,7 @@ test('Stage 5 workflow: pins, lines, stable references, legends and branded expo
   // The sidebar legend lists everything by reference.
   await expect(page.locator('[data-plan-references] [data-reference]')).toHaveText([
     /F1\s*HM\s*High Moisture/, /F2\s*Defective rainwater/, /F3\s*Elevated moisture/, /F5\s*Restricted access/,
-    /R1\s*WT\s*Woodworm Treatment/, /R2\s*Open floor/, /R3\s*Install additional/,
+    /R1\s*2\s*Woodworm Treatment/, /R2\s*FI\s*Open floor/, /R3\s*3\s*Install additional/,
   ]);
 
   // Export details: floor name and survey date are stored with the plan.

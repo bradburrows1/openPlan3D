@@ -80,7 +80,7 @@ describe.skipIf(!available)('Northway Plans with Supabase Auth, PostgREST and RL
   it('lets every staff member work on every plan, with server-owned bookkeeping', async () => {
     const brad = await signedIn(LOCAL_STAFF[0]), lewis = await signedIn(LOCAL_STAFF[1]);
     const created = await createProject(brad, { project_name: '  14 Moor Lane - Smith  ', customer_name: ' ', property_address: '14 Moor Lane' }, plan());
-    expect(created).toMatchObject({ project_name: '14 Moor Lane - Smith', customer_name: null, property_address: '14 Moor Lane', revision: 1, schema_version: 2 });
+    expect(created).toMatchObject({ project_name: '14 Moor Lane - Smith', customer_name: null, property_address: '14 Moor Lane', revision: 1, schema_version: 3 });
     const row = await lewis.from('floor_plan_projects').select('created_by, updated_by').eq('id', created.id).single();
     expect(row.data!.created_by).toBe(stack.users[LOCAL_STAFF[0].email]);
 
@@ -100,8 +100,8 @@ describe.skipIf(!available)('Northway Plans with Supabase Auth, PostgREST and RL
     ];
     imported.surveyReferences = { F: 3, R: 2 };
     imported.floors[0].recommendedWorks = [
-      { id: 'r1', layer: 'recommended-works', ref: 'R1', code: 'WT', name: 'Woodworm Treatment', color: '#d9823b', preset: 'WT', shape: 'rect', x: 200, y: 50, width: 60, height: 60 },
-      { id: 'r2', layer: 'recommended-works', ref: 'R2', code: 'OF', name: 'Open Floor for Further Inspection', color: '#2fa3a8', preset: null, shape: 'rect', x: 0, y: 0, width: 120, height: 80 },
+      { id: 'r1', layer: 'recommended-works', ref: 'R1', code: 'WT', name: 'Woodworm Treatment', color: '#d68a2e', preset: 'WT', priority: 'priority_2', shape: 'rect', x: 200, y: 50, width: 60, height: 60 },
+      { id: 'r2', layer: 'recommended-works', ref: 'R2', code: 'OF', name: 'Open Floor for Further Inspection', color: '#6f8197', preset: null, priority: 'further_investigation', shape: 'rect', x: 0, y: 0, width: 120, height: 80 },
     ];
     const created = await createProject(brad, { project_name: 'Stage 3 Test Property' }, imported);
     expect((created.project_data as any).id).toBe(created.id); // the document carries its row id

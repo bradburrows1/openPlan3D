@@ -64,10 +64,11 @@ it('suggests and limits short codes', () => {
 });
 
 it('resolves appearance from the zone, then its preset, then neutral defaults', () => {
-  expect(zoneAppearance(work({ name: 'Inject cream', color: '#2fa3a8' }))).toEqual({ code: 'WT', name: 'Inject cream', color: '#2fa3a8', custom: false });
+  // Since Stage 6 a recommendation's colour comes from its Northway Priority, never its stored colour.
+  expect(zoneAppearance(work({ name: 'Inject cream', color: '#2fa3a8', priority: 'priority_3' }))).toEqual({ code: 'WT', name: 'Inject cream', color: '#b8443d', custom: false });
   expect(zoneAppearance({ layer: 'survey-findings', code: 'HM' })).toMatchObject({ name: 'High Moisture', color: '#3b82c4', custom: false });
-  expect(zoneAppearance({ layer: 'recommended-works', code: 'OF', name: 'Open Floor', color: '#5d5fb8', preset: null })).toMatchObject({ custom: true, color: '#5d5fb8' });
-  expect(zoneAppearance({ layer: 'recommended-works', code: 'ZZ' })).toMatchObject({ name: 'ZZ', color: '#7a7f87', custom: true });
+  expect(zoneAppearance({ layer: 'recommended-works', code: 'OF', name: 'Open Floor', color: '#5d5fb8', preset: null })).toMatchObject({ custom: true, color: '#a1a1aa' }); // unassigned
+  expect(zoneAppearance({ layer: 'survey-findings', code: 'ZZ' })).toMatchObject({ name: 'ZZ', color: '#7a7f87', custom: true });
 });
 
 it('lists the zone types in use for the Stage 5 legend', () => {
@@ -77,8 +78,8 @@ it('lists the zone types in use for the Stage 5 legend', () => {
   ]);
   expect(types['survey-findings'].map(t => t.code)).toEqual(['WM', 'DP']);
   expect(types['recommended-works']).toEqual([
-    { code: 'WT', name: 'Woodworm Treatment', color: '#d9823b', custom: false },
-    { code: 'OF', name: 'Open Floor for Further Inspection', color: '#2fa3a8', custom: true },
+    { code: 'WT', name: 'Woodworm Treatment', color: '#a1a1aa', custom: false },
+    { code: 'OF', name: 'Open Floor for Further Inspection', color: '#a1a1aa', custom: true },
   ]);
 });
 
@@ -91,7 +92,8 @@ it('adds both layers independently, edits metadata without moving them, and undo
   const of = addZone({ layer: 'recommended-works', code: 'OF', name: 'Open Floor for Further Inspection', color: '#2fa3a8', preset: null }, { x: 0, y: 0, width: 50, height: 50 });
   expect(floor().surveyFindings!.map(z => z.id)).toEqual([hm]);
   expect(floor().recommendedWorks!.map(z => z.id)).toEqual([wt, of]);
-  expect(floor().recommendedWorks![0]).toMatchObject({ layer: 'recommended-works', code: 'WT', name: 'Woodworm Treatment', color: '#d9823b', preset: 'WT', ...rect });
+  // A recommendation created without a priority is 'unassigned' (grey) until the surveyor chooses one.
+  expect(floor().recommendedWorks![0]).toMatchObject({ layer: 'recommended-works', code: 'WT', name: 'Woodworm Treatment', color: '#a1a1aa', priority: 'unassigned', preset: 'WT', ...rect });
 
   updateZone(hm, { name: 'High Moisture - chimney breast' });
   updateZone(hm, { code: 'HMC' });
@@ -103,8 +105,8 @@ it('adds both layers independently, edits metadata without moving them, and undo
   expect(floor().surveyFindings![0].color).toBe('#3b82c4');
   redo();
 
-  applyZonePreset(wt, 'VI');
-  expect(floor().recommendedWorks![0]).toMatchObject({ code: 'VI', name: 'Ventilation Improvement', color: '#2fa3a8', preset: 'VI', ...rect });
+  applyZonePreset(wt, 'VI'); // on a recommendation, a preset is only its work type
+  expect(floor().recommendedWorks![0]).toMatchObject({ code: 'VI', workType: 'VI', name: 'Woodworm Treatment', priority: 'unassigned', preset: 'VI', ...rect });
   applyZonePreset(wt, 'HM'); // not a recommendation preset: ignored
   expect(floor().recommendedWorks![0].code).toBe('VI');
 
@@ -112,7 +114,7 @@ it('adds both layers independently, edits metadata without moving them, and undo
   expect(floor().recommendedWorks![1]).toMatchObject({ x: 10, y: 20, width: 60, height: 70 });
 
   const copy = duplicateZone(of)!;
-  expect(floor().recommendedWorks![2]).toMatchObject({ id: copy, code: 'OF', preset: null, color: '#2fa3a8', x: 40, y: 50 });
+  expect(floor().recommendedWorks![2]).toMatchObject({ id: copy, code: 'OF', preset: null, priority: 'unassigned', x: 40, y: 50 });
   expect(floor().surveyFindings).toHaveLength(1);
   removeZone(copy);
   removeElement(of); // the Delete key path
@@ -166,8 +168,8 @@ it('draws findings under recommendations with hatch and dashed borders only on r
 });
 
 it('exports matching SVG for both layers', () => {
-  const svg = overlaySvg([finding(), work(), work({ id: 'w2', color: '#5d5fb8' })], 0, 0);
-  expect(svg.defs.match(/<pattern /g)).toHaveLength(2); // one hatch per recommendation colour
+  const svg = overlaySvg([finding(), work({ priority: 'priority_3' }), work({ id: 'w2', priority: 'further_investigation' })], 0, 0);
+  expect(svg.defs.match(/<pattern /g)).toHaveLength(2); // one hatch per priority colour
   expect(svg.areas).toContain('data-survey-finding="WM"');
   expect(svg.areas).toContain('data-recommended-work="WT"');
   expect(svg.areas).toContain('stroke-dasharray="7 4"');

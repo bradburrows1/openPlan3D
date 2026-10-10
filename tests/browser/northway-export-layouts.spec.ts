@@ -11,7 +11,20 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('o3d_settings', JSON.stringify({ objectLibrary: 'survey' })));
 });
 
+const PRIORITY_CYCLE = ['3 — Priority Work', '2 — Recommended Work', '1 — Advisory Work', 'FI — Further Investigation'];
+let recommendationCount = 0;
+
 async function addPin(page: Page, layer: 'Finding' | 'Recommendation', at: [number, number], description: string) {
+  if (layer === 'Recommendation') {
+    // Stage 6: a recommendation is described (priority and text) before it is placed.
+    await page.getByRole('button', { name: 'Add Recommendation Pin' }).click();
+    const form = page.getByRole('dialog', { name: 'New recommendation pin' });
+    await form.getByRole('radio', { name: PRIORITY_CYCLE[recommendationCount++ % 4] }).click();
+    await form.getByRole('textbox', { name: 'Recommendation' }).fill(description);
+    await form.getByRole('button', { name: 'Place Pin' }).click();
+    await page.mouse.click(...at);
+    return;
+  }
   await page.getByRole('button', { name: `Add ${layer} Pin` }).click();
   await page.mouse.click(...at);
   const dialog = page.getByRole('dialog', { name: `${layer} pin` });

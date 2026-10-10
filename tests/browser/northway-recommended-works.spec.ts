@@ -90,32 +90,29 @@ test('Stage 4 workflow: findings and recommended works, custom zones, toggles, s
   await expect(findings.locator('[data-armed-custom-zone]')).toContainText('Defective Pointing');
   await drag(page, [cx - 200 + s, cy + 40], [cx - 90 + s, cy + 130]);
 
-  // 8–9. Recommended Works: WT over the WM area, and VI.
-  await works.getByRole('button', { name: 'Add Recommended Area' }).click();
-  await works.getByRole('button', { name: /Woodworm Treatment/ }).click();
-  await drag(page, [cx + 40 + s, cy + 20], [cx + 180 + s, cy + 120]);
-  await works.getByRole('button', { name: /Ventilation Improvement/ }).click();
-  await drag(page, [cx - 30 + s, cy - 130], [cx + 80 + s, cy - 60]);
+  // 8–9. Recommended Works (Stage 6 flow: priority and text first, then draw): WT over the WM area, and VI.
+  const recommend = async (priority: string, text: string | null, workType: string | null, from: [number, number], to: [number, number]) => {
+    await works.getByRole('button', { name: 'Add Recommended Area' }).click();
+    const form = page.getByRole('dialog', { name: 'New recommended area' });
+    await form.getByRole('radio', { name: priority }).click();
+    if (workType) await form.getByRole('combobox', { name: /Work type/ }).selectOption({ label: workType });
+    if (text) await form.getByRole('textbox', { name: 'Recommendation' }).fill(text);
+    await form.getByRole('button', { name: 'Draw Area' }).click();
+    await drag(page, from, to);
+  };
+  await recommend('2 — Recommended Work', null, 'Woodworm Treatment', [cx + 40 + s, cy + 20], [cx + 180 + s, cy + 120]);
+  await recommend('1 — Advisory Work', null, 'Ventilation Improvement', [cx - 30 + s, cy - 130], [cx + 80 + s, cy - 60]);
 
-  // 10–12. Custom recommendation "Open Floor for Further Inspection", code typed as "of".
-  await works.getByRole('button', { name: '+ Custom Recommendation' }).click();
-  dialog = page.getByRole('dialog', { name: 'Custom recommendation' });
-  await dialog.getByRole('textbox', { name: 'Name' }).fill('Open Floor for Further Inspection');
-  await expect(dialog.getByRole('textbox', { name: 'Code' })).toHaveValue('OFFI');
-  await dialog.getByRole('textbox', { name: 'Code' }).fill('of-extra-long');
-  await expect(dialog.getByRole('textbox', { name: 'Code' })).toHaveValue('OFEX'); // uppercase, at most 4
-  await dialog.getByRole('textbox', { name: 'Code' }).fill('of');
-  await expect(dialog.getByRole('textbox', { name: 'Code' })).toHaveValue('OF');
-  await dialog.getByRole('radio', { name: 'Teal' }).click();
-  await dialog.getByRole('button', { name: 'Draw Area' }).click();
-  await drag(page, [cx - 200 + s, cy - 130], [cx - 120 + s, cy - 70]);
+  // 10–12. Custom recommendation: free text only, no code or colour to choose.
+  await recommend('FI — Further Investigation', 'Open Floor for Further Inspection', null, [cx - 200 + s, cy - 130], [cx - 120 + s, cy - 70]);
+  void dialog;
 
   const drawn = await floor(page);
   expect(codes(drawn.surveyFindings)).toEqual(['HM', 'WM', 'DP']);
-  expect(codes(drawn.recommendedWorks)).toEqual(['WT', 'VI', 'OF']);
+  expect(codes(drawn.recommendedWorks)).toEqual(['WT', 'VI', 'REC']);
   expect(drawn.surveyFindings[2]).toMatchObject({ layer: 'survey-findings', name: 'Defective Pointing', color: '#5d5fb8', preset: null });
-  expect(drawn.recommendedWorks[0]).toMatchObject({ layer: 'recommended-works', name: 'Woodworm Treatment', preset: 'WT' });
-  expect(drawn.recommendedWorks[2]).toMatchObject({ name: 'Open Floor for Further Inspection', code: 'OF', color: '#2fa3a8', preset: null });
+  expect(drawn.recommendedWorks[0]).toMatchObject({ layer: 'recommended-works', name: 'Woodworm treatment', preset: 'WT', workType: 'WT', priority: 'priority_2' });
+  expect(drawn.recommendedWorks[2]).toMatchObject({ name: 'Open Floor for Further Inspection', priority: 'further_investigation', workType: null, preset: null });
   expect(geometry(drawn.recommendedWorks[0])).toEqual(geometry(drawn.surveyFindings[1])); // WT exactly over WM
   const zoom = 140 / drawn.surveyFindings[0].width;
 
@@ -124,7 +121,7 @@ test('Stage 4 workflow: findings and recommended works, custom zones, toggles, s
   let now = await floor(page);
   expect(now.recommendedWorks[0].x).toBeCloseTo(drawn.recommendedWorks[0].x + 30 / zoom, 0);
   expect(now.surveyFindings[1]).toEqual(drawn.surveyFindings[1]);
-  await expect(page.locator('[data-recommended-area-properties]')).toBeVisible();
+  await expect(page.locator('[data-recommendation-properties]')).toBeVisible();
   // A click (no drag) where they still overlap moves the selection on to WM; then resize WM.
   await page.mouse.click(cx + 120 + s, cy + 80);
   await expect(page.locator('[data-issue-area-properties]').getByRole('textbox', { name: 'Code' })).toHaveValue('WM');
@@ -157,7 +154,7 @@ test('Stage 4 workflow: findings and recommended works, custom zones, toggles, s
   await works.getByRole('button', { name: 'Show Recommended Works' }).click();
   const edited = await floor(page);
   expect(codes(edited.surveyFindings)).toEqual(['HM', 'WM', 'DP']);
-  expect(codes(edited.recommendedWorks)).toEqual(['WT', 'VI', 'OF']);
+  expect(codes(edited.recommendedWorks)).toEqual(['WT', 'VI', 'REC']);
 
   // 18–21. Save, sign out, sign in, reopen: everything persisted.
   await page.getByRole('button', { name: 'Save', exact: true }).click();
@@ -182,7 +179,7 @@ test('Stage 4 workflow: findings and recommended works, custom zones, toggles, s
   expect((await download(page, 'Export as PDF')).byteLength).toBeGreaterThan(1000);
   const svg = (await download(page, 'Export as SVG')).toString('utf8');
   expect(svg.match(/data-survey-finding="(\w+)"/g)).toEqual(['data-survey-finding="HM"', 'data-survey-finding="WM"', 'data-survey-finding="DP"']);
-  expect(svg.match(/data-recommended-work="(\w+)"/g)).toEqual(['data-recommended-work="WT"', 'data-recommended-work="VI"', 'data-recommended-work="OF"']);
+  expect(svg.match(/data-recommended-work="(\w+)"/g)).toEqual(['data-recommended-work="WT"', 'data-recommended-work="VI"', 'data-recommended-work="REC"']);
   expect(svg).toContain('<pattern id="nw-hatch-');
   expect(svg).toContain('stroke-dasharray="7 4"');
 

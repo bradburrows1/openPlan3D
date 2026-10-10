@@ -15,7 +15,7 @@ it('requires a project name and keeps customer and address optional', () => {
 it('stores the complete project and refuses damaged documents', () => {
   const project = roomProject();
   project.floors[0].surveyFindings = [{ id: 'z', layer: 'survey-findings', ref: 'F1', code: 'DP', name: 'Defective Pointing', color: '#5d5fb8', preset: null, shape: 'rect', x: 1, y: 2, width: 3, height: 4 }];
-  project.floors[0].recommendedWorks = [{ id: 'r', layer: 'recommended-works', ref: 'R1', code: 'WT', name: 'Woodworm Treatment', color: '#d9823b', preset: 'WT', shape: 'rect', x: 1, y: 2, width: 3, height: 4 }];
+  project.floors[0].recommendedWorks = [{ id: 'r', layer: 'recommended-works', ref: 'R1', code: 'WT', name: 'Woodworm Treatment', color: '#d68a2e', preset: 'WT', priority: 'priority_2', shape: 'rect', x: 1, y: 2, width: 3, height: 4 }];
   const document = projectToDocument(project, 'Named') as any;
   expect(document.name).toBe('Named');
   expect(document.floors[0].walls).toEqual(JSON.parse(JSON.stringify(project.floors[0].walls)));

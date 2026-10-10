@@ -1,7 +1,7 @@
 # Northway customisation plan: survey overlays and branded exports
 
-Status: **Stages 2, 4 and 5 implemented the survey overlays, legends and branded exports** (see
-"Stage 2", "Stage 4" and "Stage 5: what was built" at the end). This note builds on the code map in
+Status: **Stages 2, 4, 5 and 6 implemented the survey overlays, legends, branded exports and the
+Northway Priority System** (see the "what was built" sections at the end). This note builds on the code map in
 [`NORTHWAY_ARCHITECTURE.md`](NORTHWAY_ARCHITECTURE.md).
 
 Goal for later stages:
@@ -399,3 +399,80 @@ Not done in Stage 4: rotation, polygons and admin preset editing. Legends and ex
   corner sits on another area's reference. Move one of the items slightly.
 * There is no editor to retype a reference by hand (by design: references are stable).
 * Export dialog text is English only.
+
+## Stage 6: what was built (Northway Priority System)
+
+* **Principle.**
+  * Survey Findings = what Northway observed. They keep their issue colours and their F references.
+  * Recommended Works = what Northway recommends next. Since Stage 6 they are coloured only by their
+    Northway Priority.
+  * The Northway Priority is Northway's own guide for homeowners. It is not an RICS rating, condition
+    rating or "traffic light", and the UI and exports never call it that.
+* **Priorities** (`src/lib/northway/priorities.ts`, the single source):
+
+  | Value | Badge / label | Colour |
+  |---|---|---|
+  | `priority_3` | 3 — Priority Work | muted red `#b8443d` (text/outline `#8c2f29`) |
+  | `priority_2` | 2 — Recommended Work | muted amber `#d68a2e` (`#9a5a12`) |
+  | `priority_1` | 1 — Advisory Work | muted yellow `#d9b425` (`#7d6508`) |
+  | `further_investigation` | FI — Further Investigation (no number) | blue-grey `#6f8197` (`#43536a`) |
+  | `unassigned` | ? — Priority required (older items only) | grey `#a1a1aa` |
+
+  * Green is deliberately not used, because every Recommended Works item asks for some action.
+  * Each priority has a darker "ink" shade for text, outlines and dashes, so yellow stays legible in
+    print.
+  * The customer-facing definitions are stored with each priority and shown in the help (i) and the
+    Northway Priority Guide.
+* **Data** (`RecommendationFields` in `types.ts`), on every Recommended Works area, pin and line:
+  * `priority`;
+  * `workType` (optional preset code such as TR or WT, secondary information only);
+  * `quotedPricePence` (optional GBP price in whole pence; never drawn on the plan);
+  * reserved `specification` and `quantity` fields for a future quotation table.
+  * Priority is kept separate from the text (an area's `name`, a pin's or line's `description`),
+    the work type, the geometry and the R reference.
+  * The colour is always derived from the priority (`itemColor`, `itemInk`). The stored `color` is
+    kept in step for older readers, but never used to decide a priority.
+* **Workflow** (Build tab, Recommended Works):
+  * **+ Area / + Pin / + Line** opens `RecommendationDialog.svelte`. Choose a priority (required),
+    write the recommendation (required) and optionally pick a work type. Picking a work type only
+    offers starting text, for example "Timber repair / replacement". Then **Draw Area / Place Pin /
+    Draw Line**, and the item is created as soon as it is drawn.
+  * There are no codes, colours or styling choices. The preset list (Woodworm Treatment, Timber
+    Repair / Replacement, …) is now only the optional work-type list.
+* **Editing** (properties panel):
+  * the reference badge;
+  * Northway Priority (`PrioritySelector.svelte`, with (i) for the definitions);
+  * the recommendation text, work type and quoted price (£);
+  * width and depth for areas;
+  * Duplicate and Delete.
+  * Changing the priority keeps the R reference and geometry; the colour and legend follow.
+* **Styling** (Recommended Works keep their Stage 4/5 visual language, recoloured by priority):
+  * areas: a light 12% priority-coloured fill, a hatch, and a dashed border in the priority's
+    darker shade;
+  * lines: a priority-coloured band with a dashed core line;
+  * pins: a tinted hexagon with an outline and R reference in the darker shade.
+  * Findings stay solid with circle markers, so the two layers differ in greyscale.
+* **Legend and exports**:
+  * Recommended Works entries read **Reference → Priority → Recommendation**
+    (`R1 | 3 | Replace decayed …`), with a priority badge and no WT/TR/DPT codes.
+  * A compact **NORTHWAY PRIORITY GUIDE** panel (the four definitions) heads the Recommended Works
+    legend on the Recommended Works and Combined plans.
+  * The Survey Findings Plan is unchanged: issue colours and no priority key.
+  * The export dialog defaults to the Survey Findings Plan, marks Combined as optional, and
+    recommends exporting the two plans separately.
+* **Older plans** (schema version 3, `cloud/projectDocument.ts`):
+  * Recommended Works saved before Stage 6 load as `unassigned`: grey, a "?" badge and "Priority
+    required" (in the Build panel, the properties panel and the export dialog).
+  * A priority is never inferred from an old colour or preset, not even the FI preset.
+  * The final Recommended Works or Combined export is blocked while any recommendation on that
+    floor is unassigned. "Export a draft anyway" produces a page marked "DRAFT: priorities to be
+    confirmed", with `-DRAFT` in the file name. Survey Findings exports are never blocked.
+* **Future quotation**: the same R reference, priority, text, work type and price can feed a later
+  costs schedule (`R1 | Priority 3 | Recommended Work | Price`). No VAT, totals or schedule are
+  built yet.
+
+Known limitations:
+
+* The Stage 4 custom-recommendation dialog (code and colour) is no longer offered for Recommended
+  Works. Its data is still read, and findings keep their custom dialog.
+* The quoted price is edited only in the properties panel, not when the recommendation is created.

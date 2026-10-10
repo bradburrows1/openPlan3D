@@ -186,7 +186,7 @@ it('loads older projects without zones unchanged and validates saved zones', () 
 it('keeps zones through an iPhone project package round trip', () => {
   const project = roomProject() as Project;
   project.floors[0].surveyFindings = [{ id: 'z1', layer: 'survey-findings', ref: 'F1', code: 'TD', name: 'Timber Deterioration', color: '#b5534f', preset: 'TD', shape: 'rect', x: 20, y: 30, width: 90, height: 40 }];
-  project.floors[0].recommendedWorks = [{ id: 'r1', layer: 'recommended-works', ref: 'R1', code: 'OF', name: 'Open Floor for Further Inspection', color: '#2fa3a8', preset: null, shape: 'rect', x: 20, y: 30, width: 90, height: 40 }];
+  project.floors[0].recommendedWorks = [{ id: 'r1', layer: 'recommended-works', ref: 'R1', code: 'OF', name: 'Open Floor for Further Inspection', color: '#6f8197', preset: null, priority: 'further_investigation', shape: 'rect', x: 20, y: 30, width: 90, height: 40 }];
   const returned = readProjectPackage(projectPackageBytes(project)).project;
   expect(returned.floors[0].surveyFindings).toEqual(project.floors[0].surveyFindings);
   expect(returned.floors[0].recommendedWorks).toEqual(project.floors[0].recommendedWorks);

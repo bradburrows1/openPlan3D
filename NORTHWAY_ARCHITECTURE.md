@@ -227,6 +227,13 @@ Stage 3 added private staff sign-in and the Supabase-backed plan library, with s
 [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md) and "Stage 3: what was built" in
 [`NORTHWAY_CUSTOMISATION_PLAN.md`](NORTHWAY_CUSTOMISATION_PLAN.md).
 
+### Stage 6 additions
+
+Stage 6 added the Northway Priority System for Recommended Works (`src/lib/northway/priorities.ts`).
+It covers the priority-first creation dialog, priority-based colours, the Northway Priority Guide in
+the legend, and the "Priority required" export guard for older plans. The document format is now
+version 3. See "Stage 6: what was built" in [`NORTHWAY_CUSTOMISATION_PLAN.md`](NORTHWAY_CUSTOMISATION_PLAN.md).
+
 ### Stage 5 additions
 
 Stage 5 added free-text pins and lines (`markupRenderer.ts`, `overlayStore.ts`), stable F/R

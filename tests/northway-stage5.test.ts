@@ -166,13 +166,13 @@ it('validates pins and lines in saved files', () => {
   expect(bad(c => { c.surveyReferences = { F: -1, R: 0 }; })).toThrow(/surveyReferences/);
 });
 
-it('migrates stored documents to schema 2 and refuses newer ones', () => {
-  expect(CURRENT_SCHEMA_VERSION).toBe(2);
+it('migrates stored documents to the current schema and refuses newer ones', () => {
+  expect(CURRENT_SCHEMA_VERSION).toBe(3);
   const stage4 = JSON.parse(JSON.stringify(roomProject()));
   stage4.floors[0].surveyFindings = [{ id: 'a', layer: 'survey-findings', code: 'HM', shape: 'rect', x: 0, y: 0, width: 10, height: 10 }];
   const opened = documentToProject({ id: '0b2c7e5a-4f3a-4b8e-9a5f-3c2d1e0f9a8b', project_name: 'Old', project_data: stage4, schema_version: 1 });
   expect(opened.floors[0].surveyFindings![0].ref).toBe('F1');
-  expect(() => migrateDocument(stage4, 3)).toThrow(NewerSchemaError);
+  expect(() => migrateDocument(stage4, 4)).toThrow(NewerSchemaError);
 });
 
 // ── Legend and export views ──────────────────────────────────────────
@@ -187,8 +187,9 @@ it('builds the legend from items in use, in reference order, per layer', () => {
   const legend = buildLegend(all());
   expect(legend['survey-findings'].map(e => e.ref)).toEqual(['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11']); // numeric, not F10 before F2
   expect(legend['survey-findings'].slice(0, 3).map(legendText)).toEqual(['F1 — Defective rainwater goods', 'F2 — HM — High Moisture', 'F3 — DP — Defective external pointing']);
-  expect(legend['recommended-works'].map(legendText)).toEqual(['R1 — WT — Woodworm Treatment', 'R2 — Remove contaminated plaster to this section']);
-  expect(legend['recommended-works'][1]).toMatchObject({ kind: 'line', color: '#1f4f8f' });
+  // Recommendations read reference → priority → recommendation (no type codes); without a priority they are flagged.
+  expect(legend['recommended-works'].map(legendText)).toEqual(['R1 — Priority required — Woodworm Treatment', 'R2 — Priority required — Remove contaminated plaster to this section']);
+  expect(legend['recommended-works'][1]).toMatchObject({ kind: 'line', priority: 'unassigned', color: '#a1a1aa' });
   // Export views: each plan shows only its own layer, without touching the editor settings.
   const findingsOnly = surveyPlanView(get(currentProject)!, get(projectSettings), viewLayers('survey-findings')).floors[0];
   expect(findingsOnly.recommendedWorks).toEqual([]);
