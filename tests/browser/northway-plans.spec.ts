@@ -239,8 +239,8 @@ test('a failed save keeps the edits, says so, and recovers them after a reload',
   await drag(page, [box.x + 300, box.y + 200], [box.x + 420, box.y + 280]);
   await context.setOffline(true);
   await page.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.locator('[data-cloud-save-error]')).toContainText('kept on this device');
-  await expect(page.locator('[data-cloud-save-state]')).toHaveText('Unsaved changes');
+  await expect(page.locator('[data-cloud-save-error]')).toContainText('Your changes remain on this device');
+  await expect(page.locator('[data-cloud-save-state]')).toHaveText('Offline — not saved');
   await context.setOffline(false);
   page.once('dialog', dialog => void dialog.accept());
   await page.reload();
