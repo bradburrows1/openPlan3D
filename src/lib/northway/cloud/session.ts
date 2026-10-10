@@ -14,6 +14,8 @@ import { requireSupabase } from './supabase';
 import { createProject, saveProject, ProjectConflictError, ProjectMissingError, type ProjectRow } from './projectsApi';
 import { documentToProject } from './projectDocument';
 import { deleteDraft, readDraft, writeDraft, type RecoveryDraft } from './recovery';
+import { isOffline, logFailure, saveFailureMessage } from './errors';
+import { onSessionEnding } from './auth';
 
 export interface CloudSession {
   id: string;
@@ -32,6 +34,12 @@ export const cloudLastSaved = writable<Date | null>(null);
 export const recoveryOffer = writable<(RecoveryDraft & { newerOnServer: boolean }) | null>(null);
 /** Library details of the open plan (for export title blocks); renames in the library update them on next open. */
 export const cloudDetails = writable<{ customer_name: string | null; property_address: string | null } | null>(null);
+/** False while the browser reports no connection (cellars, roof spaces…). Saving is not attempted silently. */
+export const networkOnline = writable(!isOffline());
+if (typeof window !== 'undefined') {
+  addEventListener('online', () => networkOnline.set(true));
+  addEventListener('offline', () => networkOnline.set(false));
+}
 
 let savedJson = '';
 let stopWatching: (() => void) | null = null;
@@ -70,12 +78,29 @@ function refreshState() {
   }, 1500);
 }
 
+/** Write the recovery copy now (not after the usual 1.5 s pause), if there is anything unsaved. */
+export function flushRecoveryDraft(): void {
+  const project = get(currentProject), live = get(cloudSession);
+  if (!project || !live || project.id !== live.id) return;
+  if (canonical(project) === savedJson) return;
+  if (draftTimer) clearTimeout(draftTimer);
+  void writeDraft({ projectId: live.id, baseRevision: live.revision, savedAt: new Date().toISOString(), json: JSON.stringify(project) });
+}
+
+// Closing Safari, switching apps on the iPad or locking it: keep the latest edits on this device.
+function onHide() { if (document.visibilityState === 'hidden') flushRecoveryDraft(); }
+// A session that ends while editing (expired, signed out elsewhere) unmounts the editor: keep edits first.
+onSessionEnding(flushRecoveryDraft);
+
 function watch() {
   stopWatching?.();
-  stopWatching = currentProject.subscribe(() => {
+  const unsubscribe = currentProject.subscribe(() => {
     if (compareTimer) clearTimeout(compareTimer);
     compareTimer = setTimeout(refreshState, 250);
   });
+  document.addEventListener('visibilitychange', onHide);
+  addEventListener('pagehide', flushRecoveryDraft);
+  stopWatching = () => { unsubscribe(); document.removeEventListener('visibilitychange', onHide); removeEventListener('pagehide', flushRecoveryDraft); };
 }
 
 /** Load a saved row into the editor and start tracking changes. */
@@ -146,8 +171,10 @@ export async function saveCloudProject({ overwrite = false } = {}): Promise<bool
       cloudSaveState.set('missing');
       cloudSaveError.set(error.message);
     } else {
+      // Never claim success: say why in plain English, and keep the technical detail for developers.
+      logFailure('save plan', (error as { cause?: unknown })?.cause ?? error);
       cloudSaveState.set('error');
-      cloudSaveError.set(error instanceof Error ? error.message : 'Could not save this plan.');
+      cloudSaveError.set(saveFailureMessage((error as { cause?: unknown })?.cause ?? error));
     }
     // Keep the edits safe on this device until a save succeeds.
     void writeDraft({ projectId: session.id, baseRevision: session.revision, savedAt: new Date().toISOString(), json: JSON.stringify(project) });

@@ -9,11 +9,19 @@ import type { Session } from '@supabase/supabase-js';
 import { getSupabase } from './supabase';
 
 export type AuthStatus = 'loading' | 'unconfigured' | 'signed-out' | 'not-staff' | 'signed-in' | 'error';
-export interface AuthState { status: AuthStatus; email?: string; message?: string }
+export interface AuthState { status: AuthStatus; email?: string; message?: string; /** Signed out without asking (session expired or ended elsewhere). */ expired?: boolean }
 
 export const authState = writable<AuthState>({ status: 'loading' });
 
 let started: Promise<void> | null = null;
+let signingOut = false;
+const endingHooks = new Set<() => void>();
+
+/** Run just before an unexpected sign-out takes the editor away, e.g. to keep unsaved edits on the device. */
+export function onSessionEnding(hook: () => void): () => void {
+  endingHooks.add(hook);
+  return () => endingHooks.delete(hook);
+}
 
 async function evaluate(session: Session | null) {
   const supabase = getSupabase();
@@ -31,7 +39,11 @@ export function initAuth(): Promise<void> {
     if (!supabase) { authState.set({ status: 'unconfigured' }); return; }
     supabase.auth.onAuthStateChange((event, session) => {
       // Supabase advises not awaiting other calls inside this callback.
-      if (event === 'SIGNED_OUT') authState.set({ status: 'signed-out' });
+      if (event === 'SIGNED_OUT') {
+        const expired = !signingOut && get(authState).status === 'signed-in';
+        if (expired) for (const hook of endingHooks) { try { hook(); } catch { /* keep signing out */ } }
+        authState.set({ status: 'signed-out', expired });
+      }
       else if (event === 'SIGNED_IN' && get(authState).status !== 'signed-in') setTimeout(() => void evaluate(session), 0);
     });
     const { data } = await supabase.auth.getSession();
@@ -53,6 +65,8 @@ export async function signIn(email: string, password: string): Promise<string | 
 
 export async function signOut(): Promise<void> {
   const supabase = getSupabase();
-  await supabase?.auth.signOut({ scope: 'local' });
+  signingOut = true;
+  try { await supabase?.auth.signOut({ scope: 'local' }); }
+  finally { signingOut = false; }
   authState.set({ status: 'signed-out' });
 }

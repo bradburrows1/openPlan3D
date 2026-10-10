@@ -13,7 +13,11 @@
 
   onMount(() => { void initAuth(); });
   $effect(() => {
-    if ($authState.status === 'signed-out') void goto('/login', { replaceState: true });
+    if ($authState.status !== 'signed-out') return;
+    // An ended session (not Sign out) explains itself and brings the user back to the same plan.
+    // Unsaved edits were kept on this device first (onSessionEnding) and are offered on reopening.
+    const back = location.pathname.startsWith('/projects/') ? `&next=${encodeURIComponent(location.pathname)}` : '';
+    void goto($authState.expired ? `/login?expired=1${back}` : '/login', { replaceState: true });
   });
 </script>
 

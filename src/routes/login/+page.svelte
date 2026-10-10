@@ -8,8 +8,17 @@
   let busy = $state(false);
   let error = $state<string | null>(null);
 
-  onMount(() => { void initAuth(); });
-  $effect(() => { if ($authState.status === 'signed-in') void goto('/', { replaceState: true }); });
+  // After an ended session: explain, and return to the plan that was open (only a plan URL, never an outside link).
+  let expired = $state(false);
+  let next = $state('/');
+  onMount(() => {
+    const query = new URLSearchParams(location.search);
+    expired = query.get('expired') === '1';
+    const target = query.get('next') ?? '';
+    if (/^\/projects\/[0-9a-f-]{36}$/.test(target)) next = target;
+    void initAuth();
+  });
+  $effect(() => { if ($authState.status === 'signed-in') void goto(next, { replaceState: true }); });
 
   async function submit(event: SubmitEvent) {
     event.preventDefault();
@@ -17,18 +26,23 @@
     busy = true; error = null;
     try { error = await signIn(email, password); }
     finally { busy = false; }
-    if (!error) { password = ''; void goto('/', { replaceState: true }); }
+    if (!error) { password = ''; void goto(next, { replaceState: true }); }
   }
 </script>
 
 <svelte:head><title>Sign in · Northway Plans</title></svelte:head>
 
-<main class="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+<main class="min-h-screen flex items-center justify-center bg-slate-50 px-4" data-northway-touch>
   <div class="w-full max-w-sm">
     <div class="bg-white border border-slate-200 rounded-xl shadow-sm px-8 py-9">
       <img src="/northway-logo.svg" alt="Northway Preservation" class="h-9 mb-8" />
       <h1 class="text-xl font-semibold text-slate-900">Northway Plans</h1>
       <p class="text-sm text-slate-500 mt-1 mb-6">Floor plans for Northway Preservation</p>
+      {#if expired}
+        <p role="status" class="mb-4 text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2" data-session-expired>
+          Your session has ended. Sign in again to continue. Any unsaved changes were kept on this device and will be offered when the plan reopens.
+        </p>
+      {/if}
       {#if $authState.status === 'unconfigured'}
         <p role="alert" class="text-sm text-red-700">Sign-in is not configured yet. Set the Supabase environment variables (see SUPABASE_SETUP.md).</p>
       {:else}

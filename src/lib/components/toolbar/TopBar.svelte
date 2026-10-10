@@ -3,7 +3,7 @@
   import { projectServiceMessage } from '$lib/i18n/projectServiceMessages';
   let { onToggleLayers, layersOpen = false, onToggleHistory, historyOpen = false, cloud = false }: { onToggleLayers?: () => void; layersOpen?: boolean; onToggleHistory?: (trigger: HTMLButtonElement) => void; historyOpen?: boolean; cloud?: boolean } = $props();
   // Northway Plans: in cloud mode Save writes to the project library, not this browser.
-  import { cloudSaveState, cloudSaveError, cloudLastSaved, saveCloudProject, saveCloudProjectAsNew } from '$lib/northway/cloud/session';
+  import { cloudSaveState, cloudSaveError, cloudLastSaved, saveCloudProject, saveCloudProjectAsNew, networkOnline } from '$lib/northway/cloud/session';
   import SurveyExportDialog from '$lib/northway/components/SurveyExportDialog.svelte';
   let surveyExportOpen = $state(false);
   import { goto } from '$app/navigation';
@@ -449,7 +449,8 @@
 
   <!-- Plan / Elevation sub-toggle (2D only) — sits left of the 2D/3D pill so the
        two switches read as a family; mobile (<md) uses the overflow menu instead -->
-  {#if mode === '2d'}
+  <!-- Northway: elevation and 3D views are not part of the survey workflow; hidden in the Northway editor. -->
+  {#if mode === '2d' && !cloud}
     <div class="flex bg-white/15 rounded-full p-0.5 max-xl:hidden">
       <button
         onclick={exitElevation}
@@ -473,6 +474,7 @@
   {/if}
 
   <!-- 2D/3D pill toggle -->
+  {#if !cloud}
   <div class="flex bg-white/15 rounded-full p-0.5">
     <button
       onclick={() => setMode('2d')}
@@ -483,6 +485,7 @@
       class="px-3 max-xl:px-2 py-1 text-xs font-semibold rounded-full transition-colors {mode === '3d' ? 'bg-white text-slate-800' : 'text-white/80 hover:text-white'}"
     >3D</button>
   </div>
+  {/if}
 
   <!-- Zoom remains available on the canvas and in the compact toolbar menu. -->
 
@@ -558,7 +561,7 @@
           {/if}
           <div class="h-px bg-gray-100 my-1"></div>
         {/if}
-        <button class="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left" onclick={toggleElevationView}>{$elevationWallId ? '✓ ' : ''}{$t('toolbarView.elevationView')}</button>
+        {#if !cloud}<button class="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left" onclick={toggleElevationView}>{$elevationWallId ? '✓ ' : ''}{$t('toolbarView.elevationView')}</button>{/if}
         {#if onToggleHistory}
           <button class="md:hidden w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left" aria-expanded={historyOpen} aria-label={$t('editorPanels.history')} onclick={() => { onToggleHistory?.(moreButton); moreOpen = false; }}>{$t('undoHistory.title')}</button>
         {/if}
@@ -574,7 +577,7 @@
   <!-- Export dropdown -->
   <div class="relative" bind:this={exportRef}>
     <button
-      onclick={() => { exportOpen = !exportOpen; if (exportOpen) triggerTip('first-export', 300, 60); }}
+      onclick={() => { exportOpen = !exportOpen; if (exportOpen && !cloud) triggerTip('first-export', 300, 60); }}
       class="px-3 py-1.5 max-xl:px-2 text-sm text-white/90 hover:text-white hover:bg-white/10 rounded transition-colors flex items-center gap-1.5"
       title={$t('exportMenu.title')}
       aria-label={$t('exportMenu.title')}
@@ -598,22 +601,28 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
           {$t('exportMenu.png2d')}
         </button>
+        {#if !cloud}
         <button class="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left flex items-center gap-2" onclick={onExport3DPNG} disabled={exporting3D}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
           {$t('exportMenu.png3d')}
         </button>
+        {/if}
         <button class="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left flex items-center gap-2" onclick={onExportSVG}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
           {$t('exportMenu.svg')}
         </button>
+        {#if !cloud}
         <button class="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left flex items-center gap-2" onclick={onExportDXF}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 16h2"/><path d="M14 16h2"/></svg>
           {$t('exportMenu.dxf')}
         </button>
+        {/if}
+        {#if !cloud}
         <button class="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left flex items-center gap-2" onclick={onExportDWG}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 16h6"/></svg>
           {$t('exportMenu.dwg')}
         </button>
+        {/if}
         <button class="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left flex items-center gap-2" onclick={onExportPDF}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 11v6"/><path d="M8 11v6"/><path d="M12 11v6"/></svg>
           {$t('exportMenu.pdf')}
@@ -644,8 +653,12 @@
 
   <!-- Reserve the widest translated status so autosave cannot move toolbar targets. -->
   {#if cloud}
-  <span class="shrink-0 text-[11px] font-medium whitespace-nowrap {$cloudSaveState === 'saved' ? 'text-emerald-400' : $cloudSaveState === 'saving' ? 'text-amber-300 animate-pulse' : 'text-white/70'}" title={lastSavedText} data-cloud-save-state={$cloudSaveState}>
-    {$cloudSaveState === 'saving' ? 'Saving…' : $cloudSaveState === 'saved' ? 'Saved' : 'Unsaved changes'}
+  <!-- Saved only after the database confirms; a failed save says so; offline is shown explicitly. -->
+  {@const failed = $cloudSaveState === 'error' || $cloudSaveState === 'conflict' || $cloudSaveState === 'missing'}
+  {@const offlineUnsaved = !$networkOnline && $cloudSaveState !== 'saved' && $cloudSaveState !== 'saving'}
+  <span class="shrink-0 text-[11px] font-medium whitespace-nowrap {$cloudSaveState === 'saved' ? 'text-emerald-400' : $cloudSaveState === 'saving' ? 'text-amber-300 animate-pulse' : failed ? 'text-red-300 font-semibold' : offlineUnsaved ? 'text-amber-300' : 'text-white/70'}"
+    title={offlineUnsaved ? 'Offline — changes not yet saved to Northway Plans' : lastSavedText} data-cloud-save-state={$cloudSaveState} data-network={$networkOnline ? 'online' : 'offline'}>
+    {$cloudSaveState === 'saving' ? 'Saving…' : offlineUnsaved ? 'Offline — not saved' : failed ? 'Save failed' : $cloudSaveState === 'saved' ? ($networkOnline ? 'Saved' : 'Saved · Offline') : 'Unsaved changes'}
   </span>
   {:else}
   <span class="inline-grid shrink-0 text-[11px] font-medium max-xl:hidden">
@@ -670,9 +683,15 @@
 
 {#if surveyExportOpen}<SurveyExportDialog onclose={() => surveyExportOpen = false} />{/if}
 
+{#if cloud && !$networkOnline}
+  <div role="status" data-offline-banner class="flex flex-wrap items-center gap-2 bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-900">
+    <span class="font-semibold">Offline</span>
+    <span>Changes are not yet saved to Northway Plans. They are kept on this device; save again when the connection returns.</span>
+  </div>
+{/if}
 {#if cloud && $cloudSaveError}
   <div role="alert" data-cloud-save-error class="flex flex-wrap items-center gap-3 bg-red-50 border-b border-red-200 px-4 py-3 text-sm text-red-900">
-    <span class="flex-1 min-w-48">{$cloudSaveError}{$cloudSaveState === 'error' || $cloudSaveState === 'conflict' || $cloudSaveState === 'missing' ? ' Your changes are kept on this device until they are saved.' : ''}</span>
+    <span class="flex-1 min-w-48">{$cloudSaveError}{$cloudSaveState === 'conflict' || $cloudSaveState === 'missing' ? ' Your changes are kept on this device until they are saved.' : ''}</span>
     {#if $cloudSaveState === 'conflict'}
       <button class="font-semibold underline" onclick={overwriteCloud}>Replace with my version</button>
       <button class="font-semibold underline" onclick={saveCloudCopy}>Save mine as a new plan</button>
