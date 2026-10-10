@@ -17,8 +17,9 @@
   import { furnitureCatalog, furnitureCategories } from '$lib/utils/furnitureCatalog';
   import { FIXTURE_LIBRARY_IDS, FIXED_FIXTURE_IDS, isSurveyLibrary } from '$lib/northway/fixtures';
   import { projectSettings } from '$lib/stores/settings';
-  import { placingZone } from '$lib/northway/overlayStore';
+  import { placingZone, cancelMarkupTool } from '$lib/northway/overlayStore';
   import OverlayLayerGroup from '$lib/northway/components/OverlayLayerGroup.svelte';
+  import PlanReferences from '$lib/northway/components/PlanReferences.svelte';
   import type { FurnitureDef } from '$lib/utils/furnitureCatalog';
   import FurnitureThumbnail from './FurnitureThumbnail.svelte';
   import CustomModelPanel from './CustomModelPanel.svelte';
@@ -47,6 +48,7 @@
     else selectedTool.set(tool);
     placingFurnitureId.set(null);
     placingZone.set(null);
+    cancelMarkupTool();
   }
 
   let currentTool = $state<Tool>('select');
@@ -409,6 +411,7 @@
         <!-- Northway: the two survey overlay layers, each independently editable and showable. -->
         <OverlayLayerGroup layer="survey-findings" />
         <OverlayLayerGroup layer="recommended-works" />
+        <PlanReferences />
 
         <h3 class="text-xs font-semibold text-gray-400 uppercase mb-2 mt-3">{$t('buildTools.structure')}</h3>
         <button
