@@ -30,6 +30,8 @@ export const cloudSaveError = writable<string | null>(null);
 export const cloudLastSaved = writable<Date | null>(null);
 /** A recovery copy from an earlier visit that differs from the saved plan. */
 export const recoveryOffer = writable<(RecoveryDraft & { newerOnServer: boolean }) | null>(null);
+/** Library details of the open plan (for export title blocks); renames in the library update them on next open. */
+export const cloudDetails = writable<{ customer_name: string | null; property_address: string | null } | null>(null);
 
 let savedJson = '';
 let stopWatching: (() => void) | null = null;
@@ -82,6 +84,7 @@ export async function openCloudProject(row: ProjectRow): Promise<void> {
   loadProject(project);
   savedJson = canonical(get(currentProject) ?? project);
   cloudSession.set({ id: row.id, revision: row.revision });
+  cloudDetails.set({ customer_name: row.customer_name ?? null, property_address: row.property_address ?? null });
   cloudSaveState.set('saved');
   cloudSaveError.set(null);
   cloudLastSaved.set(new Date(row.updated_at));
@@ -176,4 +179,5 @@ export function closeCloudProject(): void {
   cloudSaveState.set('saved');
   cloudSaveError.set(null);
   recoveryOffer.set(null);
+  cloudDetails.set(null);
 }
