@@ -26,8 +26,9 @@ import jsPDF from 'jspdf';
 import { surveyPlanView } from '$lib/northway/planView';
 import { TECHNICAL_FIXTURE } from '$lib/northway/fixtures';
 import { drawZoneAreas, drawZoneCodes } from '$lib/northway/overlayRenderer';
+import { drawMarkupLines, drawMarkupMarkers } from '$lib/northway/markupRenderer';
 import { floorZones } from '$lib/northway/overlayStore';
-import { overlaySvg } from '$lib/northway/overlaySvg';
+import { overlaySvg, markupSvg } from '$lib/northway/overlaySvg';
 import { exportRoomFill, isTechnicalStyle, TECHNICAL } from './planStyle';
 
 /** Escape text for safe SVG embedding */
@@ -88,6 +89,11 @@ function extendBoundsForRoomLabels(floor: Floor, bounds: { minX: number; minY: n
 
 /** Northway: issue areas and recommended areas can reach beyond the walls. */
 function extendBoundsForOverlayZones(floor: Floor, bounds: { minX: number; minY: number; maxX: number; maxY: number }) {
+  const markupPoints = [...(floor.overlayPins ?? []), ...(floor.overlayLines ?? []).flatMap(line => line.points)];
+  for (const p of markupPoints) {
+    bounds.minX = Math.min(bounds.minX, p.x - 16); bounds.minY = Math.min(bounds.minY, p.y - 16);
+    bounds.maxX = Math.max(bounds.maxX, p.x + 16); bounds.maxY = Math.max(bounds.maxY, p.y + 16);
+  }
   for (const zone of floorZones(floor)) {
     bounds.minX = Math.min(bounds.minX, zone.x - 2); bounds.minY = Math.min(bounds.minY, zone.y - 2);
     bounds.maxX = Math.max(bounds.maxX, zone.x + zone.width + 2); bounds.maxY = Math.max(bounds.maxY, zone.y + zone.height + 2);
@@ -301,7 +307,9 @@ export async function exportAsPNG(canvas: HTMLCanvasElement | null, project?: Pr
 
       // Draw doors and windows (shared full-fidelity renderer)
       drawOpeningsOnCanvas(ctx, floor, minX, minY, pad);
+      drawMarkupLines(zoneState, floor.overlayLines ?? []);
       drawZoneCodes(zoneState, floorZones(floor));
+      drawMarkupMarkers(zoneState, floor.overlayPins ?? [], floor.overlayLines ?? []);
 
       for (const item of floor.furniture) drawFurnitureItem({
         ctx, width: pad * 2, height: pad * 2, zoom: 1, camX: minX, camY: minY,
@@ -403,6 +411,7 @@ export function exportAsSVG(project: Project, language: Locale = 'en') {
 
   // Northway: findings then recommended works above room fills, below walls; codes are appended last.
   const overlay = overlaySvg(floorZones(floor), minX - pad, minY - pad);
+  const markup = markupSvg(floor.overlayPins ?? [], floor.overlayLines ?? [], minX - pad, minY - pad);
   paths += overlay.areas;
 
   for (const w of floor.walls) {
@@ -663,7 +672,7 @@ export function exportAsSVG(project: Project, language: Locale = 'en') {
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${vw} ${vh}" width="${vw}" height="${vh}">
 ${overlay.defs}  <rect width="100%" height="100%" fill="white"/>
-${paths}${overlay.codes}</svg>`;
+${paths}${markup.lines}${overlay.codes}${markup.markers}</svg>`;
 
   const blob = new Blob([svg], { type: 'image/svg+xml' });
   download(blob, `${project.name || 'floorplan'}.svg`);
@@ -857,7 +866,9 @@ function renderPDF(project: Project, preparedImages: ReadonlyMap<string,HTMLImag
 
   // Doors and windows (shared full-fidelity renderer)
   drawOpeningsOnCanvas(ctx, floor, minX, minY, pad);
-  drawZoneCodes(zoneState, floorZones(floor));
+  drawMarkupLines(zoneState, floor.overlayLines ?? []);
+      drawZoneCodes(zoneState, floorZones(floor));
+      drawMarkupMarkers(zoneState, floor.overlayPins ?? [], floor.overlayLines ?? []);
 
   for (const item of floor.furniture) drawFurnitureItem({
     ctx, width: pad * 2, height: pad * 2, zoom: 1, camX: minX, camY: minY,

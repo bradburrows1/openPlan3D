@@ -1,8 +1,8 @@
 import jsPDF from 'jspdf';
 import { translate, type Locale } from '$lib/i18n';
 import { get } from 'svelte/store';
-import type { Project } from '$lib/models/types';
-import { projectSettings, formatArea } from '$lib/stores/settings';
+import type { Floor, Project } from '$lib/models/types';
+import { projectSettings, formatArea, type ProjectSettings } from '$lib/stores/settings';
 import { resolveRooms } from './roomDetection';
 import { drawRooms, drawDoorOnWall, drawWindowOnWall, drawFurnitureItem, drawStair, drawColumn, drawAnnotations, drawPersistedMeasurements, drawTextAnnotations, drawEntourageItems } from './canvasRenderer';
 import { worldToScreen, type CanvasState } from './canvasInteraction';
@@ -10,6 +10,7 @@ import { surveyPlanView } from '$lib/northway/planView';
 import { isTechnicalStyle } from './planStyle';
 import { drawZoneAreas, drawZoneCodes } from '$lib/northway/overlayRenderer';
 import { floorZones } from '$lib/northway/overlayStore';
+import { drawMarkupLines, drawMarkupMarkers } from '$lib/northway/markupRenderer';
 import { activePrintFloor, printBounds, calculatePrintLayout, type PrintOptions } from './printLayout';
 
 const PIXELS_PER_MM = 6;
@@ -48,31 +49,7 @@ export function renderPrintPage(canvas: HTMLCanvasElement, project: Project, opt
   ctx.translate(area.x, area.y);
   ctx.scale(1 / PIXELS_PER_MM, 1 / PIXELS_PER_MM);
   const cs: CanvasState = { ctx, width: area.width * PIXELS_PER_MM, height: area.height * PIXELS_PER_MM, zoom: mmPerCm * PIXELS_PER_MM, camX: center.x, camY: center.y };
-  const settings = get(projectSettings);
-  drawRooms(cs, floor, resolveRooms(floor), null, true, true, settings);
-  drawZoneAreas(cs, floorZones(floor));
-  ctx.strokeStyle = '#334155';
-  ctx.lineCap = 'round';
-  for (const wall of floor.walls) {
-    const a = worldToScreen(cs, wall.start.x, wall.start.y), b = worldToScreen(cs, wall.end.x, wall.end.y);
-    ctx.lineWidth = wall.thickness * cs.zoom;
-    ctx.beginPath(); ctx.moveTo(a.x, a.y);
-    if (wall.curvePoint) {
-      const c = worldToScreen(cs, wall.curvePoint.x, wall.curvePoint.y);
-      ctx.quadraticCurveTo(c.x, c.y, b.x, b.y);
-    } else ctx.lineTo(b.x, b.y);
-    ctx.stroke();
-  }
-  for (const door of floor.doors) { const wall = floor.walls.find(w => w.id === door.wallId); if (wall) drawDoorOnWall(cs, wall, door); }
-  for (const win of floor.windows) { const wall = floor.walls.find(w => w.id === win.wallId); if (wall) drawWindowOnWall(cs, wall, win); }
-  drawZoneCodes(cs, floorZones(floor));
-  for (const item of floor.furniture) drawFurnitureItem(cs, item, false, undefined, isTechnicalStyle(settings));
-  for (const item of floor.stairs ?? []) drawStair(cs, item, false);
-  for (const item of floor.columns ?? []) drawColumn(cs, item, false);
-  drawAnnotations(cs, floor, null, settings);
-  drawPersistedMeasurements(cs, floor, null, settings);
-  drawTextAnnotations(cs, floor, null, null);
-  drawEntourageItems(cs, floor, null, project.customEntourage);
+  drawPlanContent(cs, floor, project, get(projectSettings));
   ctx.restore();
   ctx.textAlign = 'left'; ctx.fillStyle = '#64748b'; ctx.font = '2.5px sans-serif';
   ctx.fillText(translate(language, 'print.sheetFooter'), 12, pageHeight - 7, pageWidth - 24);
@@ -113,4 +90,39 @@ export function createPrintPDF(canvas: HTMLCanvasElement, project: Project, opti
     y += 3;
   }
   return pdf;
+}
+
+/**
+ * Everything drawn on a printed or exported plan, in order: room fills, overlay areas, walls,
+ * openings, markup lines, area references, fixtures, stairs, columns, dimensions, labels, then pin
+ * and line reference markers. Shared by scaled print and the Northway report export.
+ */
+export function drawPlanContent(cs: CanvasState, floor: Floor, project: Project, settings: ProjectSettings) {
+  const { ctx } = cs;
+  drawRooms(cs, floor, resolveRooms(floor), null, true, true, settings);
+  drawZoneAreas(cs, floorZones(floor));
+  ctx.strokeStyle = '#334155';
+  ctx.lineCap = 'round';
+  for (const wall of floor.walls) {
+    const a = worldToScreen(cs, wall.start.x, wall.start.y), b = worldToScreen(cs, wall.end.x, wall.end.y);
+    ctx.lineWidth = wall.thickness * cs.zoom;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y);
+    if (wall.curvePoint) {
+      const c = worldToScreen(cs, wall.curvePoint.x, wall.curvePoint.y);
+      ctx.quadraticCurveTo(c.x, c.y, b.x, b.y);
+    } else ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  }
+  for (const door of floor.doors) { const wall = floor.walls.find(w => w.id === door.wallId); if (wall) drawDoorOnWall(cs, wall, door); }
+  for (const win of floor.windows) { const wall = floor.walls.find(w => w.id === win.wallId); if (wall) drawWindowOnWall(cs, wall, win); }
+  drawMarkupLines(cs, floor.overlayLines ?? []);
+  drawZoneCodes(cs, floorZones(floor));
+  for (const item of floor.furniture) drawFurnitureItem(cs, item, false, undefined, isTechnicalStyle(settings));
+  for (const item of floor.stairs ?? []) drawStair(cs, item, false);
+  for (const item of floor.columns ?? []) drawColumn(cs, item, false);
+  drawAnnotations(cs, floor, null, settings);
+  drawPersistedMeasurements(cs, floor, null, settings);
+  drawTextAnnotations(cs, floor, null, null);
+  drawEntourageItems(cs, floor, null, project.customEntourage);
+  drawMarkupMarkers(cs, floor.overlayPins ?? [], floor.overlayLines ?? []);
 }
