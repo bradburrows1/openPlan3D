@@ -2,7 +2,7 @@
   /**
    * The description step of + Pin / + Line: after the location or points are chosen on the plan,
    * ask for the surveyor's own description and a colour, then create the item with the next
-   * stable reference. Cancelling creates nothing.
+   * reference. Cancelling creates nothing.
    */
   import { get } from 'svelte/store';
   import { t } from '$lib/i18n';

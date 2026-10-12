@@ -75,7 +75,7 @@ export function zoneCodeBox(r: { x: number; y: number; width: number; height: nu
   return { x, y: r.y + 4, width: boxWidth, height: boxHeight, pad };
 }
 
-/** Each zone's stable reference (F1, R2, …; the type code for unreferenced drafts), drawn discreetly in its layer's corner. */
+/** Each zone's reference (F1, R2, …; the type code for unreferenced drafts), drawn discreetly in its layer's corner. */
 export function drawZoneCodes(cs: CanvasState, zones: readonly OverlayZone[]): void {
   const { ctx } = cs;
   ctx.save();

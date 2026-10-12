@@ -3,7 +3,8 @@ import { splitWallRoomReferences } from '$lib/utils/splitWallRooms';
 import { splitWallGeometry } from '$lib/utils/splitWallGeometry';
 import { wallPathProfile } from '$lib/utils/wallProfiles';
 import { duplicatePlanSelection, pastePlanSelection } from '$lib/utils/duplicateSelection';
-import { writable, derived, get } from 'svelte/store';
+import { writable, derived, get, type Writable } from 'svelte/store';
+import { compactReferences } from '$lib/northway/references';
 import type { Project, Floor, Wall, Door, Window as Win, FurnitureItem, Point, Stair, Column, BackgroundImage, GuideLine, ElementGroup, EntourageItem } from '$lib/models/types';
 import { planWallResize, finitePoint, validPositiveDimension, validOpeningPosition, type WallEndpoint } from '$lib/utils/wallEditing';
 import { getOuterWalls } from '$lib/utils/outerWalls';
@@ -35,7 +36,17 @@ export function createDefaultProject(name = 'Untitled Project'): Project {
   };
 }
 
-export const currentProject = writable<Project | null>(null);
+const projectStore = writable<Project | null>(null);
+
+/**
+ * The open project. Every write keeps the Northway F/R plan references sequential
+ * (compactReferences), so adding, deleting, pasting or undoing never leaves a gap.
+ */
+export const currentProject: Writable<Project | null> = {
+  subscribe: projectStore.subscribe,
+  set: project => { if (project) compactReferences(project); projectStore.set(project); },
+  update: fn => projectStore.update(current => { const next = fn(current); if (next) compactReferences(next); return next; }),
+};
 
 export const activeFloor = derived(currentProject, ($p) => {
   if (!$p) return null;

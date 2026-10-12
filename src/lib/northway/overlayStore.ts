@@ -62,7 +62,7 @@ function activeFloor() {
   return project?.floors.find(f => f.id === project.activeFloorId);
 }
 
-/** The next stable reference for a layer, recorded on the open project (call inside a mutation). */
+/** The next reference for a layer, recorded on the open project (call inside a mutation). */
 function nextRef(layer: OverlayLayer): string | undefined {
   const project = get(currentProject);
   return project ? issueRef(project, layer) : undefined;
@@ -176,7 +176,7 @@ export function addLine(draft: MarkupDraft, points: Point[]): string {
   return id;
 }
 
-/** Edit a pin's or line's description or colour. The reference never changes. */
+/** Edit a pin's or line's description or colour. Its reference is kept. */
 export function updateMarkup(id: string, updates: Partial<Pick<OverlayPin, 'description' | 'color'>>) {
   mutateActiveFloor(floor => {
     const item = findPin(floor, id) ?? findLine(floor, id);

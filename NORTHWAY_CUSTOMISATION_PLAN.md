@@ -313,20 +313,24 @@ Not done in Stage 4: rotation, polygons and admin preset editing. Legends and ex
   * only the reference (F2, R3) is drawn on the plan; the description goes in the legend;
   * lines are drawn above walls (they usually follow one), and markers are drawn last.
 
-### Stable references (`src/lib/northway/references.ts`)
+### Plan references (`src/lib/northway/references.ts`)
 
-* Every Survey Findings item (area, pin or line) gets F1, F2, …; every Recommended Works item gets
-  R1, R2, …. Numbers are unique across the whole project (all floors).
-* The reference is stored on the item (`ref`). `Project.surveyReferences = { F, R }` keeps the
-  highest number issued, so deleting F2 never renumbers F3, and F2 is never reused.
-* Undo restores whole-project snapshots, so a per-session high-water mark also stops an undone
-  number from being issued again.
-* Moving, editing or retyping an item keeps its reference. Duplicating gives the copy a new one.
-* `normalizeReferences()` runs on every load:
-  * older areas without a reference get one, in floor and item order;
-  * a duplicated reference (the second copy) or one with the wrong letter for its layer gets the
-    next free number;
-  * valid references are never changed.
+* Every Survey Findings item (area, pin or line) shows F1, F2, …; every Recommended Works item
+  shows R1, R2, …. Numbers run across the whole project (all floors). The two sequences are
+  independent.
+* The reference is only a display label, stored on the item (`ref`). The item's permanent identity
+  is its `id`, which never changes; selection, editing, undo, saving and Supabase all use the id.
+* References are always sequential with no gaps (changed after Stage 7 at Northway's request):
+  deleting F2 makes F3 the new F2. `compactReferences()` runs on every write to the open project
+  (the `currentProject` store) and on every load, so the editor, plan labels, legends and every
+  export always show the same current numbers.
+* Order is creation order: a new item is issued the next number, and renumbering keeps the
+  existing order, so reopening a plan never reorders it. Older plans with gaps (F1, F3, F5) open
+  as F1, F2, F3 in the same order.
+* A duplicated reference (the second copy), one with the wrong letter for its layer, or a missing
+  one goes last, in floor and item order. `Project.surveyReferences = { F, R }` holds the current
+  count of each.
+* Moving, editing or retyping an item keeps its reference. Duplicating gives the copy the next one.
 * The plan shows the reference: areas show it in their corner, instead of the type code.
 
 ### Automatic legend (`src/lib/northway/legend.ts`)

@@ -56,25 +56,67 @@ it('numbers findings F1… and recommendations R1… across areas, pins and line
   expect(all().overlayLines![0].ref).toBe('F3');
 });
 
-it('never renumbers or reuses a reference after deletes, duplicates and undo', () => {
-  const a = addZone(HM, rect), b = addPin({ layer: 'survey-findings', description: 'b', color: '#3b82c4' }, { x: 0, y: 0 });
-  addPin({ layer: 'survey-findings', description: 'c', color: '#3b82c4' }, { x: 0, y: 0 });
-  removeMarkup(b); // F2 deleted: F3 stays F3
-  expect(all().overlayPins!.map(p => p.ref)).toEqual(['F3']);
-  expect(addPin({ layer: 'survey-findings', description: 'd', color: '#3b82c4' }, { x: 0, y: 0 })).toBeTruthy();
-  expect(all().overlayPins!.map(p => p.ref)).toEqual(['F3', 'F4']);
+it('keeps references sequential after deletes, duplicates and undo, without changing ids', () => {
+  const pin = (description: string) => addPin({ layer: 'survey-findings', description, color: '#3b82c4' }, { x: 0, y: 0 });
+  const a = addZone(HM, rect), b = pin('b'), c = pin('c');
+  removeMarkup(b); // F2 deleted: F3 becomes F2, and keeps its id
+  expect(all().overlayPins!.map(p => [p.id, p.ref])).toEqual([[c, 'F2']]);
+  const d = pin('d');
+  expect(all().overlayPins!.map(p => p.ref)).toEqual(['F2', 'F3']);
   const copy = duplicateZone(a)!;
-  expect(all().surveyFindings!.find(z => z.id === copy)!.ref).toBe('F5');
-  undo(); // the duplicate is gone, but F5 is not handed out again in this session
+  expect(all().surveyFindings!.find(z => z.id === copy)!.ref).toBe('F4');
+  undo();
   expect(all().surveyFindings!.map(z => z.ref)).toEqual(['F1']);
   addZone(HM, rect);
-  expect(all().surveyFindings!.map(z => z.ref)).toEqual(['F1', 'F6']);
+  expect(all().surveyFindings!.map(z => z.ref)).toEqual(['F1', 'F4']);
   redo(); // nothing to redo after a new edit
-  removeZone(a);
-  removeElement(all().overlayPins![0].id); // Delete key
-  expect(get(currentProject)!.surveyReferences!.F).toBe(6);
-  const dup = duplicateMarkup(all().overlayPins![0].id)!;
-  expect(all().overlayPins!.find(p => p.id === dup)!.ref).toBe('F7');
+  removeZone(a); // F1 deleted: everything moves up one, in the same order
+  expect(all().overlayPins!.map(p => [p.id, p.ref])).toEqual([[c, 'F1'], [d, 'F2']]);
+  expect(all().surveyFindings!.map(z => z.ref)).toEqual(['F3']);
+  removeElement(c); // Delete key
+  expect(all().overlayPins!.map(p => [p.id, p.ref])).toEqual([[d, 'F1']]);
+  expect(get(currentProject)!.surveyReferences!.F).toBe(2);
+  const dup = duplicateMarkup(d)!;
+  expect(all().overlayPins!.find(p => p.id === dup)!.ref).toBe('F3');
+  undo(); undo(); // undo brings the deleted item back with its old number
+  expect(all().overlayPins!.map(p => [p.id, p.ref])).toEqual([[c, 'F1'], [d, 'F2']]);
+});
+
+it('numbers findings and recommendations independently: add three, delete the second, add one', () => {
+  const find = (n: string) => addPin({ layer: 'survey-findings', description: n, color: '#3b82c4' }, { x: 0, y: 0 });
+  const rec = (n: string) => addZone({ ...WT, name: n, priority: 'priority_2' }, rect);
+  const f = [find('one'), find('two'), find('three')], r = [rec('one'), rec('two'), rec('three'), rec('four')];
+  expect(all().overlayPins!.map(p => p.ref)).toEqual(['F1', 'F2', 'F3']);
+  expect(all().recommendedWorks!.map(z => z.ref)).toEqual(['R1', 'R2', 'R3', 'R4']);
+  removeMarkup(f[1]);
+  expect(all().overlayPins!.map(p => p.ref)).toEqual(['F1', 'F2']);
+  expect(all().recommendedWorks!.map(z => z.ref)).toEqual(['R1', 'R2', 'R3', 'R4']); // R untouched
+  find('four');
+  expect(all().overlayPins!.map(p => [p.description, p.ref])).toEqual([['one', 'F1'], ['three', 'F2'], ['four', 'F3']]);
+  removeZone(r[1]);
+  expect(all().recommendedWorks!.map(z => [z.name, z.ref, z.priority])).toEqual([['one', 'R1', 'priority_2'], ['three', 'R2', 'priority_2'], ['four', 'R3', 'priority_2']]);
+  rec('five');
+  expect(all().recommendedWorks!.map(z => z.ref)).toEqual(['R1', 'R2', 'R3', 'R4']);
+  expect(all().overlayPins!.map(p => p.ref)).toEqual(['F1', 'F2', 'F3']); // F untouched
+  // Save and reopen: the same order and numbers.
+  const reopened = readProject(JSON.parse(JSON.stringify(get(currentProject))));
+  expect(reopened.floors[0].overlayPins!.map(p => [p.description, p.ref])).toEqual([['one', 'F1'], ['three', 'F2'], ['four', 'F3']]);
+  expect(reopened.floors[0].recommendedWorks!.map(z => [z.name, z.ref])).toEqual([['one', 'R1'], ['three', 'R2'], ['four', 'R3'], ['five', 'R4']]);
+});
+
+it('numbers across floors and closes gaps when a floor’s items are deleted', () => {
+  const project = roomProject();
+  const second = structuredClone(project.floors[0]);
+  second.id = 'floor-2'; second.level = 1;
+  project.floors[0].overlayPins = [{ id: 'g1', layer: 'survey-findings', ref: 'F1', description: 'g1', color: '#3b82c4', x: 0, y: 0 }];
+  second.overlayPins = [{ id: 'u1', layer: 'survey-findings', ref: 'F2', description: 'u1', color: '#3b82c4', x: 0, y: 0 }];
+  project.floors[0].overlayLines = [{ id: 'g2', layer: 'survey-findings', ref: 'F3', description: 'g2', color: '#3b82c4', points: [{ x: 0, y: 0 }, { x: 9, y: 0 }] }];
+  project.floors.push(second);
+  loadProject(project);
+  removeMarkup('g1');
+  const p = get(currentProject)!;
+  expect(p.floors[1].overlayPins![0].ref).toBe('F1');
+  expect(p.floors[0].overlayLines![0].ref).toBe('F2');
 });
 
 it('gives older plans references once, in floor order, and keeps them on every later load', () => {
@@ -94,18 +136,21 @@ it('gives older plans references once, in floor order, and keeps them on every l
   expect('surveyReferences' in readProject(JSON.parse(JSON.stringify(roomProject())))).toBe(false);
 });
 
-it('repairs duplicate, missing and wrong-layer references without touching valid ones', () => {
+it('closes gaps in older plans in their existing order and repairs duplicate, missing and wrong-layer references', () => {
   const project = roomProject();
   project.surveyReferences = { F: 9, R: 0 };
   project.floors[0].overlayPins = [
+    { id: 'p5', layer: 'survey-findings', ref: 'F5', description: 'later', color: '#3b82c4', x: 0, y: 0 },
     { id: 'p1', layer: 'survey-findings', ref: 'F4', description: 'a', color: '#3b82c4', x: 0, y: 0 },
     { id: 'p2', layer: 'survey-findings', ref: 'F4', description: 'copy', color: '#3b82c4', x: 0, y: 0 },
     { id: 'p3', layer: 'recommended-works', ref: 'F7', description: 'wrong letter', color: '#3b82c4', x: 0, y: 0 },
     { id: 'p4', layer: 'survey-findings', description: 'none', color: '#3b82c4', x: 0, y: 0 },
   ];
   normalizeReferences(project);
-  expect(project.floors[0].overlayPins!.map(p => p.ref)).toEqual(['F4', 'F10', 'R1', 'F11']);
-  expect(project.surveyReferences).toEqual({ F: 11, R: 1 });
+  // F4 keeps its place before F5; the copy and the unnumbered pin go last, in plan order.
+  expect(project.floors[0].overlayPins!.map(p => [p.id, p.ref])).toEqual([['p5', 'F2'], ['p1', 'F1'], ['p2', 'F3'], ['p3', 'R1'], ['p4', 'F4']]);
+  expect(project.surveyReferences).toEqual({ F: 4, R: 1 });
+  expect(readProject(JSON.parse(JSON.stringify(project))).floors[0].overlayPins!.map(p => p.ref)).toEqual(['F2', 'F1', 'F3', 'R1', 'F4']);
   expect(parseRef('F12')).toEqual({ prefix: 'F', n: 12 });
   expect(parseRef('F0')).toBeNull();
   expect(parseRef('X1')).toBeNull();

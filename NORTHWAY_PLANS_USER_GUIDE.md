@@ -51,7 +51,8 @@ Under **Survey Findings**:
   "Elevated moisture readings along base of external wall".
 
 Every finding gets a reference, **F1, F2, F3…**. Use these in the written report ("Finding F3
-identifies…"). References never change: deleting F2 does not renumber F3, and F2 is never reused.
+identifies…"). The numbers always run in order with no gaps: if you delete F2, F3 becomes F2,
+and so on. Check the report text against the exported plan after deleting anything.
 
 ## Recommended Works: what Northway recommends
 

@@ -1,6 +1,6 @@
 /**
  * Northway: the automatic legend. It lists only the items actually on a floor, per layer, in
- * stable reference order (F1, F2, … then R1, R2, …), never alphabetically, so a reader can go from a
+ * reference order (F1, F2, … then R1, R2, …), never alphabetically, so a reader can go from a
  * marker on the plan to its line in the legend.
  *
  *   F2  HM  High Moisture            (area from a preset: reference, type code, name)

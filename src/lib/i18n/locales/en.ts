@@ -1520,7 +1520,7 @@ export const en = {
   "northway.addPin": "Add Pin",
   "northway.addLine": "Add Line",
   "northway.planReferences": "On this plan",
-  "northway.referenceHelp": "Stable reference for the survey report. It does not change when other items are added or deleted.",
+  "northway.referenceHelp": "Reference for the survey report. Numbers stay in order with no gaps: deleting an item moves the later ones up by one.",
   "northway.lineEditHelp": "Drag a point to reshape the line, or the line to move it. Double-click the line to add a point, or a point to remove it.",
   "northway.removeLastPoint": "Remove last point",
   "settings.fullObjectLibrary": "Full object library",

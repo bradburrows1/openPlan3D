@@ -1520,7 +1520,7 @@ export const pt = {
   "northway.addPin": "Adicionar marcador",
   "northway.addLine": "Adicionar linha",
   "northway.planReferences": "Nesta planta",
-  "northway.referenceHelp": "Referência estável para o relatório. Não muda quando outros itens são adicionados ou excluídos.",
+  "northway.referenceHelp": "Referência para o relatório. Os números ficam em sequência, sem lacunas: ao excluir um item, os seguintes sobem uma posição.",
   "northway.lineEditHelp": "Arraste um ponto para mudar a linha, ou a linha para movê-la. Clique duas vezes na linha para adicionar um ponto, ou num ponto para removê-lo.",
   "northway.removeLastPoint": "Remover último ponto",
   "settings.fullObjectLibrary": "Biblioteca completa de objetos",
