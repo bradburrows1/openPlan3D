@@ -9,6 +9,7 @@
   import { planContentBounds, hasPlanContent } from '$lib/utils/planContentBounds';
   import { connectedWallEndpoints } from '$lib/utils/wallEditing';
   import { createDrawScheduler } from '$lib/utils/drawScheduler';
+  import { clampZoom, readWheel, wheelZoomFactor, zoomAbout, type WheelGesture } from '$lib/utils/wheelZoom';
   import { activeFloor, selectedTool, selectedElementId, selectedElementIds, selectedRoomId, addWall, addDoor, addWindow, updateWall, moveWallEndpoint, moveWallGeometryDuringDrag, updateDoor, updateWindow, addFurniture, moveFurniture, transformFurnitureDuringDrag, rotateFurniture, rotateSelection, setFurnitureRotation, scaleFurniture, removeElement, placingFurnitureId, placingRotation, placingDoorType, placingWindowType, detectedRoomsStore, duplicateDoor, duplicateWindow, duplicateFurniture, duplicateSelection, pasteSelection, moveWallParallel, splitWall, wallSplitIntersectsOpening, snapEnabled, placingStair, addStair, moveStair, updateStair, placingColumn, placingColumnShape, addColumn, moveColumn, updateColumn, calibrationMode, calibrationPoints, updateBackgroundImage, setBackgroundImage, canvasZoom, canvasMinimumZoom, canvasCamX, canvasCamY, panMode, showFurnitureStore, addGuide, moveGuide, removeGuide, beginUndoGroup, endUndoGroup, layerVisibility, updateRoom, addMeasurement, updateMeasurement, removeMeasurement, addAnnotation, removeAnnotation, updateAnnotation, addTextAnnotation, removeTextAnnotation, updateTextAnnotation, moveTextAnnotation, toggleFurnitureLock, toggleSelectionLock, createGroup, ungroupElements, findGroupForElement, placingEntourageId, addEntourageItem, moveEntourage, resizeEntourage, currentProject, elevationWallId, elevationPickMode } from '$lib/stores/project';
   import type { Point, Wall, Door, Window as Win, FurnitureItem, Stair, Column, GuideLine, Measurement, Annotation, TextAnnotation, CustomEntourageDef } from '$lib/models/types';
   import type { Floor, Room } from '$lib/models/types';
@@ -469,8 +470,16 @@
   function resize() {
     const parent = canvas?.parentElement;
     if (!parent) return;
+    const oldWidth = width, oldHeight = height;
     width = parent.clientWidth;
     height = parent.clientHeight;
+    // Keep the plan still when the canvas changes size (the properties panel opens on selection,
+    // the window is resized): the camera is the view's centre, so move it by half the change,
+    // which keeps the top-left of the view fixed instead of shifting the plan sideways.
+    if (oldWidth > 0 && oldHeight > 0 && width > 0 && height > 0) {
+      camX += (width - oldWidth) / (2 * zoom);
+      camY += (height - oldHeight) / (2 * zoom);
+    }
     if (canvas) {
       canvas.width = width;
       canvas.height = height;
@@ -1852,6 +1861,7 @@
         if (activeViewKey) floorViews.set(activeViewKey, { x: camX, y: camY, zoom, minimumZoom, fitted: initialFitDone });
         activeViewKey = viewKey;
         const saved = viewKey ? floorViews.get(viewKey) : undefined;
+        stopZoomTween();
         camX = saved?.x ?? 0; camY = saved?.y ?? 0; zoom = saved?.zoom ?? 1;
         minimumZoom = saved?.minimumZoom ?? 0.1;
         initialFitDone = saved?.fitted ?? false;
@@ -1993,8 +2003,11 @@
     canvas.addEventListener('touchmove', onTouchMove, { passive: false });
     canvas.addEventListener('touchend', onTouchEnd, { passive: false });
     canvas.addEventListener('touchcancel', onTouchEnd, { passive: false });
+    canvas.addEventListener('gesturestart', onGestureStart, { passive: false });
+    canvas.addEventListener('gesturechange', onGestureChange, { passive: false });
+    canvas.addEventListener('gestureend', onGestureEnd, { passive: false });
 
-    return () => { mounted = false; drawing?.stop(); stopTextures(); resizeObs.disconnect(); unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8(); unsub9(); unsub10(); unsub11(); unsub12(); unsub13(); unsub_multi(); unsub_elevopen(); unsub_elevpick(); unsub14(); unsub_col(); unsub_cols(); unsub_layers(); unsub_snapgrid(); unsubEnt1(); unsubEnt2(); document.removeEventListener('paste', handlePaste); canvas.removeEventListener('touchstart', onTouchStart); canvas.removeEventListener('touchmove', onTouchMove); canvas.removeEventListener('touchend', onTouchEnd); canvas.removeEventListener('touchcancel', onTouchEnd); };
+    return () => { mounted = false; drawing?.stop(); stopTextures(); resizeObs.disconnect(); unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8(); unsub9(); unsub10(); unsub11(); unsub12(); unsub13(); unsub_multi(); unsub_elevopen(); unsub_elevpick(); unsub14(); unsub_col(); unsub_cols(); unsub_layers(); unsub_snapgrid(); unsubEnt1(); unsubEnt2(); document.removeEventListener('paste', handlePaste); canvas.removeEventListener('touchstart', onTouchStart); canvas.removeEventListener('touchmove', onTouchMove); canvas.removeEventListener('touchend', onTouchEnd); canvas.removeEventListener('touchcancel', onTouchEnd); canvas.removeEventListener('gesturestart', onGestureStart); canvas.removeEventListener('gesturechange', onGestureChange); canvas.removeEventListener('gestureend', onGestureEnd); stopZoomTween(); };
   });
 
   /** Compute world bounding box of all elements */
@@ -2138,6 +2151,7 @@
   }
 
   function zoomToFit(selectionOnly = false) {
+    stopZoomTween();
     const ids = fitSelectionIds();
     const boundsAt = (scale = 1) => selectionOnly
       ? (currentFloor ? boundsForFloor(currentFloor,scale,ids) : null) : getFitBounds(scale);
@@ -3328,6 +3342,40 @@
     wallSnapInfo = null;
   }
 
+  // ── Wheel / trackpad zoom (utils/wheelZoom.ts) ─────────────────────
+  // Zoom scales with the size of the movement, so a trackpad zooms gently and one mouse-wheel
+  // click zooms one step. A wheel click eases to its new scale over a few frames; trackpad and
+  // pinch input is already continuous and is applied as it arrives. The plan point under the
+  // cursor stays under the cursor throughout.
+  let lastWheel: WheelGesture | null = null;
+  let zoomTween: { target: number; sx: number; sy: number; frame: number } | null = null;
+
+  function zoomAtScreen(newZoom: number, sx: number, sy: number) {
+    const next = clampZoom(newZoom, minimumZoom);
+    ({ camX, camY } = zoomAbout({ camX, camY, zoom }, sx, sy, width, height, next));
+    zoom = next;
+    markDirty();
+  }
+
+  function stopZoomTween() {
+    if (zoomTween) cancelAnimationFrame(zoomTween.frame);
+    zoomTween = null;
+  }
+
+  function easeZoom(factor: number, sx: number, sy: number) {
+    const target = clampZoom((zoomTween?.target ?? zoom) * factor, minimumZoom);
+    if (zoomTween) cancelAnimationFrame(zoomTween.frame);
+    const step = () => {
+      if (!zoomTween) return;
+      // Move 40% of the remaining way (in scale terms) each frame: about 120 ms to settle.
+      const remaining = Math.log(zoomTween.target / zoom);
+      if (Math.abs(remaining) < 0.002) { zoomAtScreen(zoomTween.target, zoomTween.sx, zoomTween.sy); zoomTween = null; return; }
+      zoomAtScreen(zoom * Math.exp(remaining * 0.4), zoomTween.sx, zoomTween.sy);
+      zoomTween.frame = requestAnimationFrame(step);
+    };
+    zoomTween = { target, sx, sy, frame: requestAnimationFrame(step) };
+  }
+
   function onWheel(e: WheelEvent) {
     markDirty();
     e.preventDefault();
@@ -3341,33 +3389,36 @@
     const rect = canvas.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
+    const gesture = lastWheel = readWheel(e, lastWheel, performance.now());
 
-    if (e.ctrlKey) {
-      // Pinch-to-zoom on trackpad (or Ctrl+scroll)
-      const factor = e.deltaY > 0 ? 0.95 : 1.05;
-      const newZoom = Math.max(minimumZoom, Math.min(10, zoom * factor));
-      // Zoom towards cursor position
-      const worldX = (sx - width / 2) / zoom + camX;
-      const worldY = (sy - height / 2) / zoom + camY;
-      camX = worldX - (sx - width / 2) / newZoom;
-      camY = worldY - (sy - height / 2) / newZoom;
-      zoom = newZoom;
-    } else if (Math.abs(e.deltaX) > 0) {
-      // Two-finger trackpad pan (deltaX present means trackpad gesture)
+    if (gesture.action === 'pan') {
+      stopZoomTween();
       camX += e.deltaX / zoom;
       camY += e.deltaY / zoom;
+    } else if (gesture.notched) {
+      easeZoom(wheelZoomFactor(e, true, height), sx, sy);
     } else {
-      // Regular scroll wheel: zoom towards cursor
-      const factor = e.deltaY > 0 ? 0.9 : 1.1;
-      const newZoom = Math.max(minimumZoom, Math.min(10, zoom * factor));
-      // Zoom towards cursor position
-      const worldX = (sx - width / 2) / zoom + camX;
-      const worldY = (sy - height / 2) / zoom + camY;
-      camX = worldX - (sx - width / 2) / newZoom;
-      camY = worldY - (sy - height / 2) / newZoom;
-      zoom = newZoom;
+      stopZoomTween();
+      zoomAtScreen(zoom * wheelZoomFactor(e, false, height), sx, sy);
     }
   }
+
+  // Safari on a Mac reports a trackpad pinch as gesture events, not wheel events; without this
+  // it zooms the whole page. On iPad the touch handlers below already do the pinch, so gesture
+  // events are only used when no touch is in progress.
+  let gestureStart: { zoom: number } | null = null;
+  function onGestureStart(e: Event) {
+    e.preventDefault();
+    gestureStart = pinchState || singleTouchActive ? null : { zoom };
+    stopZoomTween();
+  }
+  function onGestureChange(e: Event) {
+    e.preventDefault();
+    if (!gestureStart || pinchState || singleTouchActive) return;
+    const g = e as Event & { scale: number; clientX: number; clientY: number }, rect = canvas.getBoundingClientRect();
+    zoomAtScreen(gestureStart.zoom * g.scale, g.clientX - rect.left, g.clientY - rect.top);
+  }
+  function onGestureEnd(e: Event) { e.preventDefault(); gestureStart = null; }
 
   // ── Touch input (phones/tablets) ──────────────────────────────────
   // One finger drives the existing mouse pipeline via synthetic MouseEvents
@@ -3451,12 +3502,10 @@
       const cy = (a.clientY + b.clientY) / 2;
       const rect = canvas.getBoundingClientRect();
       const sx = cx - rect.left, sy = cy - rect.top;
-      // Zoom about the pinch midpoint (same math as onWheel)
-      const newZoom = Math.max(minimumZoom, Math.min(10, zoom * (dist / (pinchState.dist || dist))));
-      const worldX = (sx - width / 2) / zoom + camX;
-      const worldY = (sy - height / 2) / zoom + camY;
-      camX = worldX - (sx - width / 2) / newZoom;
-      camY = worldY - (sy - height / 2) / newZoom;
+      // Zoom about the pinch midpoint (same math as the wheel)
+      stopZoomTween();
+      const newZoom = clampZoom(zoom * (dist / (pinchState.dist || dist)), minimumZoom);
+      ({ camX, camY } = zoomAbout({ camX, camY, zoom }, sx, sy, width, height, newZoom));
       zoom = newZoom;
       // Two-finger pan: camera follows the midpoint
       camX -= (cx - pinchState.cx) / newZoom;
@@ -4502,28 +4551,23 @@
       title={$t('canvasZoom.outHint')}
       aria-label={$t('canvasZoom.out')}
       onclick={() => {
-        const newZoom = Math.max(minimumZoom, zoom * 0.8);
-        // Zoom towards canvas center
-        const worldCX = (width / 2 - width / 2) / zoom + camX;
-        const worldCY = (height / 2 - height / 2) / zoom + camY;
-        camX = worldCX - (width / 2 - width / 2) / newZoom;
-        camY = worldCY - (height / 2 - height / 2) / newZoom;
-        zoom = newZoom;
+        stopZoomTween();
+        zoom = clampZoom(zoom * 0.8, minimumZoom); // about the centre: the camera is the centre
       }}
     >−</button>
     <button
       class="min-w-[3.5rem] h-7 flex items-center justify-center rounded hover:bg-gray-100 text-xs font-medium text-gray-600 hover:text-gray-800 tabular-nums"
       title={$t('canvasZoom.resetHint')}
       aria-label={$t('canvasZoom.reset')}
-      onclick={() => { zoom = 1; }}
+      onclick={() => { stopZoomTween(); zoom = clampZoom(1, minimumZoom); }}
     >{zoom < 0.01 ? (zoom * 100).toPrecision(2) : Math.round(zoom * 100)}%</button>
     <button
       class="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 hover:text-gray-800 font-bold text-lg"
       title={$t('canvasZoom.inHint')}
       aria-label={$t('canvasZoom.in')}
       onclick={() => {
-        const newZoom = Math.min(10, zoom * 1.25);
-        zoom = newZoom;
+        stopZoomTween();
+        zoom = clampZoom(zoom * 1.25, minimumZoom);
       }}
     >+</button>
     <div class="w-px h-5 bg-gray-200"></div>
