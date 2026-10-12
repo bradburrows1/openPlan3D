@@ -35,9 +35,13 @@ On the **Build** tab:
 * **Text Label** and **Dimension** add notes and measurements.
 * **Undo / Redo** are at the top.
 
-**Moving around:** pinch with two fingers to zoom, drag with two fingers to pan. On a laptop, scroll
-to zoom and hold Space and drag to pan. A one-finger tap selects; a finger drag moves the selected
-item. The iPad waits until you move or lift your finger, so a pinch never draws by accident.
+**Moving around (iPad):** pinch with two fingers to zoom, drag with two fingers to pan. A one-finger
+tap selects; a finger drag moves the selected item. The iPad waits until you move or lift your
+finger, so a pinch never draws by accident.
+
+**Moving around (laptop):** point at the part of the plan you want and scroll the mouse wheel, or
+scroll up and down on the trackpad, to zoom towards it. Pinch on the trackpad also zooms. Scroll
+sideways on the trackpad, or hold Space and drag, to pan.
 
 ## Survey Findings: what you found
 
