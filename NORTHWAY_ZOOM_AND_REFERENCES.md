@@ -102,6 +102,17 @@ steps:
 4. Export the Findings, Recommended Works and Combined plans, and check that each reference is drawn
    on the plan and in the legend, with no stale numbers.
 
+### Test results
+
+* **Unit tests:** 1,255 pass, and `svelte-check` reports no errors.
+* **Full browser suite:** 409 tests against the production build.
+  * 408 passed.
+  * 1 failed: an upstream 3D-viewer resource test, unrelated to these changes (the 3D view is
+    hidden in Northway Plans). It then passed 9 out of 9 runs on its own, so the failure was
+    timing under parallel load.
+* **Updated tests:** existing browser tests that allowed for the old 128 px panel jump, or for
+  "references are never reused", were updated to the new behaviour.
+
 ### Browser limitations (not hidden)
 
 * **Only Chromium is installed in the test environment.** Chrome and Edge use the same engine and
