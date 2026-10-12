@@ -97,7 +97,7 @@ test('Stage 3 workflow: create, draw, find, save, reopen, edit, export, duplicat
   await page.getByRole('button', { name: /High Moisture/ }).click();
   await drag(page, [cx - 180, cy - 120], [cx - 60, cy - 40]);
   // HM is now selected and the properties panel narrows the canvas, re-centring the plan.
-  const shift = Math.round(((await canvas.boundingBox())!.width - box.width) / 2);
+  const shift = 0; // the plan stays put when the properties panel opens
   await page.getByRole('button', { name: /Woodworm Activity/ }).click();
   await drag(page, [cx + 40 + shift, cy + 20], [cx + 160 + shift, cy + 110]);
   const drawn = (await exportedJSON(page)).floors[0];

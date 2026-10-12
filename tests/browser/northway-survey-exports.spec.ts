@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
 import { LOCAL_STAFF } from '../../tooling/northway-supabase/local-stack.mjs';
 
-// Northway Stage 5: free-text pins and lines, stable F/R references, automatic legends and the
+// Northway Stage 5: free-text pins and lines, sequential F/R references, automatic legends and the
 // branded Survey Findings / Recommended Works / Combined exports. Runs against the local
 // Supabase stack (see playwright.config.ts global setup).
 test.use({ storageState: { cookies: [], origins: [] } }); // start signed out
@@ -45,7 +45,7 @@ function pngInfo(png: Buffer) {
 const row = (page: Page, name: string) => page.locator('[data-plan-row]').filter({ has: page.getByRole('link', { name, exact: true }) });
 const refs = (items: any[] = []) => items.map(item => item.ref);
 
-test('Stage 5 workflow: pins, lines, stable references, legends and branded exports', async ({ page }) => {
+test('Stage 5 workflow: pins, lines, sequential references, legends and branded exports', async ({ page }) => {
   test.slow();
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -82,7 +82,7 @@ test('Stage 5 workflow: pins, lines, stable references, legends and branded expo
   await findings.getByRole('button', { name: /High Moisture/ }).click();
   await drag(page, [cx - 220, cy - 140], [cx - 100, cy - 60]);
   await expect(badge).toHaveText('F1');
-  const s = Math.round(((await canvas.boundingBox())!.width - box.width) / 2); // the properties panel is open from here on
+  const s = 0; // the plan stays put when the properties panel opens
 
   // 4–5. Finding pin with the surveyor's own description and a colour.
   await findings.getByRole('button', { name: 'Add Finding Pin' }).click();
@@ -153,7 +153,7 @@ test('Stage 5 workflow: pins, lines, stable references, legends and branded expo
   expect(floor.overlayLines[0].points[2].x).toBeCloseTo(line.points[2].x + 20 / zoom, 0);
   expect(floor.overlayLines[0].points[0]).toEqual(line.points[0]);
 
-  // A deleted reference is not reused: add and delete a pin (F4); the next finding is F5.
+  // References close up: add and delete a pin (F4); the next finding is F4 again.
   await findings.getByRole('button', { name: 'Add Finding Pin' }).click();
   await page.mouse.click(cx - 20 + s, cy - 20);
   await page.getByRole('dialog', { name: 'Finding pin' }).getByRole('textbox', { name: 'Description' }).fill('Temporary note');
@@ -164,11 +164,11 @@ test('Stage 5 workflow: pins, lines, stable references, legends and branded expo
   await page.mouse.click(cx - 20 + s, cy - 20);
   await page.getByRole('dialog', { name: 'Finding pin' }).getByRole('textbox', { name: 'Description' }).fill('Restricted access beneath fitted kitchen');
   await page.getByRole('dialog', { name: 'Finding pin' }).getByRole('button', { name: 'Add Pin' }).click();
-  await expect(badge).toHaveText('F5');
+  await expect(badge).toHaveText('F4');
 
   // The sidebar legend lists everything by reference.
   await expect(page.locator('[data-plan-references] [data-reference]')).toHaveText([
-    /F1\s*HM\s*High Moisture/, /F2\s*Defective rainwater/, /F3\s*Elevated moisture/, /F5\s*Restricted access/,
+    /F1\s*HM\s*High Moisture/, /F2\s*Defective rainwater/, /F3\s*Elevated moisture/, /F4\s*Restricted access/,
     /R1\s*2\s*Woodworm Treatment/, /R2\s*FI\s*Open floor/, /R3\s*3\s*Install additional/,
   ]);
 
@@ -187,7 +187,7 @@ test('Stage 5 workflow: pins, lines, stable references, legends and branded expo
   const edited = await project(page);
   expect(edited.surveyDate).toBe('2026-10-09');
   expect(edited.floors[0].name).toBe('Ground Floor');
-  expect(edited.surveyReferences).toEqual({ F: 5, R: 3 });
+  expect(edited.surveyReferences).toEqual({ F: 4, R: 3 });
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.locator('[data-cloud-save-state]')).toHaveText('Saved');
   await page.getByRole('link', { name: /Back to Plans/ }).click();

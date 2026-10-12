@@ -86,7 +86,7 @@ test('Northway Plans v1 acceptance: scan to Word-ready Findings and Recommended 
   };
   // F1 High Moisture (rear dining-room wall), F2 Timber Deterioration, F3 Woodworm Activity.
   await area(/High Moisture/, [cx - 200, cy - 150], [cx - 110, cy - 110]);
-  const s = Math.round(((await canvas.boundingBox())!.width - box.width) / 2);
+  const s = 0; // the plan stays put when the properties panel opens
   await area(/Timber Deterioration/, [cx - 60 + s, cy - 60], [cx + 20 + s, cy]);
   await area(/Woodworm Activity/, [cx + 40 + s, cy - 60], [cx + 120 + s, cy]);
   await expect(badge).toHaveText('F3');

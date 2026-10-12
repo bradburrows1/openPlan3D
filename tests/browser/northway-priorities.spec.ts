@@ -74,7 +74,7 @@ test('Northway Priority workflow: prioritised recommendations, edits, exports an
   await findings.getByRole('button', { name: 'Add Issue Area' }).click();
   await findings.getByRole('button', { name: /High Moisture/ }).click();
   await drag(page, [cx - 220, cy - 140], [cx - 80, cy - 40]);
-  const s = Math.round(((await canvas.boundingBox())!.width - box.width) / 2);
+  const s = 0; // the plan stays put when the properties panel opens
   await findings.getByRole('button', { name: /Timber Deterioration/ }).click();
   await drag(page, [cx + 40 + s, cy + 20], [cx + 200 + s, cy + 140]);
   await findings.getByRole('button', { name: 'Add Finding Pin' }).click();

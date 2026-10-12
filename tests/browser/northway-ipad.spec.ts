@@ -105,13 +105,13 @@ test('iPad touch: pinch never draws, taps select without nudging, fingers can dr
   // Select something else, then tap the pin with a 6 px wobble: selected, not moved.
   await page.keyboard.press('Escape');
   await expect(badge).toHaveCount(0);
-  const s = Math.round(((await canvas.boundingBox())!.width - box.width) / 2);
+  const s = 0; // the plan stays put when the properties panel opens
   await touch.tap(cx + 100 + s, cy - 60, 6);
   await expect(badge).toHaveText('F1');
   expect((await projectJson(page)).floors[0].overlayPins[0]).toEqual(placed);
 
   // A deliberate finger drag moves it.
-  const s2 = Math.round(((await canvas.boundingBox())!.width - box.width) / 2);
+  const s2 = 0; // the plan stays put when the properties panel opens
   await touch.drag([cx + 100 + s2, cy - 60], [cx + 160 + s2, cy - 20]);
   const moved = (await projectJson(page)).floors[0].overlayPins[0];
   expect(moved.ref).toBe('F1');
@@ -123,7 +123,7 @@ test('iPad touch: pinch never draws, taps select without nudging, fingers can dr
   await page.mouse.move(cx - 220 + s2, cy - 150); await page.mouse.down();
   await page.mouse.move(cx - 100 + s2, cy - 60, { steps: 6 }); await page.mouse.up();
   const area = (await projectJson(page)).floors[0].surveyFindings[0];
-  const s3 = Math.round(((await canvas.boundingBox())!.width - box.width) / 2);
+  const s3 = 0; // the plan stays put when the properties panel opens
   await touch.drag([cx - 100 + s3 + 14, cy - 60 + 14], [cx - 40 + s3 + 14, cy - 20 + 14]); // 14 px off the corner
   const resized = (await projectJson(page)).floors[0].surveyFindings[0];
   expect(resized.width).toBeGreaterThan(area.width + 20);

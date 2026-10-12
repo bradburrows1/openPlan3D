@@ -75,7 +75,7 @@ test('Stage 4 workflow: findings and recommended works, custom zones, toggles, s
   await drag(page, [cx - 200, cy - 130], [cx - 60, cy - 40]);
   // HM is selected and the properties panel narrows the canvas, re-centring the plan.
   // A zone stays selected from here until the layer toggles, so the layout is stable.
-  const s = Math.round(((await canvas.boundingBox())!.width - box.width) / 2);
+  const s = 0; // the plan stays put when the properties panel opens
   await findings.getByRole('button', { name: /Woodworm Activity/ }).click();
   await drag(page, [cx + 40 + s, cy + 20], [cx + 180 + s, cy + 120]);
 

@@ -60,9 +60,9 @@ test('survey plan: fixtures only, issue areas, layer toggle, save and export', a
   expect(zones[0]).toMatchObject({ code: 'HM', layer: 'survey-findings', shape: 'rect' });
   const zoom = 140 / zones[0].width;
 
-  // WM, drawn while HM is selected, so the layout is stable from here on.
+  // WM, drawn while HM is selected (the plan stays put when the properties panel opens).
   await page.getByRole('button', { name: /Woodworm Activity/ }).click();
-  await drag(page, [820, 420], [960, 520]);
+  await drag(page, [948, 420], [1088, 520]);
   zones = (await exportJSON(page)).floors[0].surveyFindings;
   expect(zones.map((z: any) => z.code)).toEqual(['HM', 'WM']);
   const wm = zones[1];
@@ -70,12 +70,12 @@ test('survey plan: fixtures only, issue areas, layer toggle, save and export', a
   expect(wm.height).toBeCloseTo(100 / zoom, 0);
 
   // Resize WM from its south-east handle, then move it by its interior.
-  await drag(page, [960, 520], [1000, 550]);
+  await drag(page, [1088, 520], [1128, 550]);
   let resized = (await exportJSON(page)).floors[0].surveyFindings[1];
   expect(resized.x).toBeCloseTo(wm.x, 3);
   expect(resized.width).toBeCloseTo(wm.width + 40 / zoom, 0);
   expect(resized.height).toBeCloseTo(wm.height + 30 / zoom, 0);
-  await drag(page, [880, 470], [930, 450]);
+  await drag(page, [1008, 470], [1058, 450]);
   const moved = (await exportJSON(page)).floors[0].surveyFindings[1];
   expect(moved.x).toBeCloseTo(resized.x + 50 / zoom, 0);
   expect(moved.y).toBeCloseTo(resized.y - 20 / zoom, 0);
